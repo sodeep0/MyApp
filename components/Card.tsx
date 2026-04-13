@@ -1,0 +1,79 @@
+import React from 'react';
+import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Colors, Spacing, Shapes, Shadows } from '../constants/theme';
+
+interface CardProps {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  padding?: number;
+  noShadow?: boolean;
+  hero?: boolean;
+  heroGradient?: 'blue' | 'warm';
+}
+
+export function Card({
+  children,
+  style,
+  padding = Spacing.md,
+  noShadow = false,
+  hero = false,
+  heroGradient = 'blue',
+}: CardProps) {
+  if (hero) {
+    const gradientColors = heroGradient === 'warm'
+      ? ([Colors.WarmSand, Colors.WarmSand] as const)
+      : ([Colors.SteelBlue, Colors.TextPrimary] as const);
+
+    return (
+      <LinearGradient
+        colors={gradientColors}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.heroContainer,
+          { padding },
+          !noShadow && styles.heroShadow,
+          style,
+        ]}
+      >
+        {children}
+      </LinearGradient>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.container,
+        { padding },
+        noShadow && styles.noShadow,
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: Colors.Surface,
+    borderRadius: Shapes.Card,
+    borderColor: Colors.BorderSubtle,
+    borderWidth: 1,
+    ...Shadows.Card,
+  },
+  heroContainer: {
+    borderRadius: Shapes.HeroCard,
+    borderWidth: 0,
+    ...Shadows.HeroCard,
+  },
+  heroShadow: {},
+  noShadow: {
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+});
+
+export default Card;
