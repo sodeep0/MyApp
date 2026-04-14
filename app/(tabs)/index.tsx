@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter, useFocusEffect } from "expo-router";
-import React, { useEffect, useState, useCallback } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -152,9 +152,21 @@ const QUICK_ACTIONS = [
     icon: "add-circle-outline",
     route: "/(tabs)/habits/add-edit" as const,
   },
-  { label: "+Log", icon: "pencil-outline", route: "/(tabs)/track/activity" as const },
-  { label: "Journal", icon: "book-outline", route: "/(tabs)/track/journal" as const },
-  { label: "Goals", icon: "flag-outline", route: "/(tabs)/goals/add-edit" as const },
+  {
+    label: "+Log",
+    icon: "pencil-outline",
+    route: "/(tabs)/track/activity" as const,
+  },
+  {
+    label: "Journal",
+    icon: "book-outline",
+    route: "/(tabs)/track/journal" as const,
+  },
+  {
+    label: "Goals",
+    icon: "flag-outline",
+    route: "/(tabs)/goals/add-edit" as const,
+  },
 ];
 
 export default function HomeScreen() {
@@ -366,7 +378,9 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionCaptionTitle}>{"TODAY'S HABITS"}</Text>
-            <AnimatedPressable onPress={() => router.push("/(tabs)/habits" as any)}>
+            <AnimatedPressable
+              onPress={() => router.push("/(tabs)/habits" as any)}
+            >
               <View style={styles.seeAll}>
                 <Text style={styles.seeAllText}>See all</Text>
                 <Ionicons
@@ -500,7 +514,9 @@ export default function HomeScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionCaptionTitle}>GOALS IN PROGRESS</Text>
-              <AnimatedPressable onPress={() => router.push("/(tabs)/goals" as any)}>
+              <AnimatedPressable
+                onPress={() => router.push("/(tabs)/goals" as any)}
+              >
                 <View style={styles.seeAll}>
                   <Text style={styles.seeAllText}>See all</Text>
                   <Ionicons
@@ -584,12 +600,12 @@ export default function HomeScreen() {
         onPress={() => setShowFAB(true)}
         style={{
           position: "absolute",
-          right: Spacing.screenH,
-          bottom: insets.bottom + 65,
+          right: Spacing.screenH + 22,
+          bottom: insets.bottom + 70,
         }}
       >
         <View style={styles.fabCircle}>
-          <Ionicons name="add" size={28} color={Colors.Surface} />
+          <Ionicons name="add" size={27} color={Colors.Surface} />
         </View>
       </AnimatedPressable>
 

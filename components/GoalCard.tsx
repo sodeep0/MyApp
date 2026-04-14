@@ -53,6 +53,7 @@ export function GoalCard({ goal, onPress, style }: GoalCardProps) {
   const progress = calculateProgress(goal);
   const progressPercent = Math.round(progress * 100);
   const isCompleted = goal.status === GoalStatus.COMPLETED;
+  const isQuantitative = goal.goalType === GoalType.QUANTITATIVE && !!goal.targetValue;
 
   const daysLeft = computeDaysLeft(goal.targetDate);
   const isNearDeadline = daysLeft !== null && daysLeft >= 0 && daysLeft <= 3 && !isCompleted;
@@ -79,9 +80,19 @@ export function GoalCard({ goal, onPress, style }: GoalCardProps) {
         </View>
       )}
 
-      <Text style={[styles.title, isCompleted && styles.titleCompleted]} numberOfLines={2}>
-        {goal.title || 'Untitled Goal'}
-      </Text>
+      <View style={styles.titleRow}>
+        <Text style={[styles.title, isCompleted && styles.titleCompleted]} numberOfLines={2}>
+          {goal.title || 'Untitled Goal'}
+        </Text>
+        {isQuantitative && (
+          <Text style={styles.progressNumbersInline} numberOfLines={1}>
+            {formatNumber(goal.currentValue || 0)}
+            <Text style={styles.progressUnitInline}>
+              {` / ${formatNumber(goal.targetValue || 0)} ${goal.unit || ''}`}
+            </Text>
+          </Text>
+        )}
+      </View>
 
       <View style={[styles.categoryChip, isCompleted && styles.categoryChipCompleted]}>
         <Text
@@ -95,12 +106,8 @@ export function GoalCard({ goal, onPress, style }: GoalCardProps) {
         </Text>
       </View>
 
-      {goal.goalType === GoalType.QUANTITATIVE && goal.targetValue && (
+      {isQuantitative && (
         <View style={styles.progressSection}>
-          <Text style={styles.progressNumbers} numberOfLines={1}>
-            {formatNumber(goal.currentValue || 0)}{' '}
-            <Text style={styles.progressUnit}>/ {formatNumber(goal.targetValue)} {goal.unit || ''}</Text>
-          </Text>
           <Text style={styles.progressPercentLabel}>
             {progressPercent}% Progress
           </Text>
@@ -228,8 +235,8 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: Colors.Surface,
     borderRadius: Shapes.Card,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
+    padding: Spacing.sm + 4,
+    marginBottom: Spacing.sm,
     position: 'relative',
     ...Shadows.Card,
   },
@@ -241,10 +248,10 @@ const styles = StyleSheet.create({
   },
   iconBox: {
     position: 'absolute',
-    top: Spacing.md,
-    left: Spacing.md,
-    width: 36,
-    height: 36,
+    top: Spacing.sm + 4,
+    left: Spacing.sm + 4,
+    width: 32,
+    height: 32,
     borderRadius: Shapes.IconBg,
     justifyContent: 'center',
     alignItems: 'center',
@@ -267,10 +274,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   title: {
-    ...Typography.Headline1,
+    ...Typography.Headline2,
     color: Colors.TextPrimary,
-    marginTop: 38,
+    marginTop: 0,
+    marginBottom: 0,
+    flex: 1,
+  },
+  titleRow: {
+    marginTop: 34,
     marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
   },
   titleCompleted: {
     textDecorationLine: 'line-through',
@@ -297,26 +312,27 @@ const styles = StyleSheet.create({
     color: Colors.TextSecondary,
   },
   progressSection: {
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
   },
-  progressNumbers: {
-    ...Typography.Stat,
+  progressNumbersInline: {
+    ...Typography.Body1,
     color: Colors.TextPrimary,
+    fontWeight: '700',
+    marginTop: 2,
+    flexShrink: 0,
   },
-  progressUnit: {
-    fontSize: 14,
-    fontWeight: '400',
-    fontFamily: 'Inter-Regular',
+  progressUnitInline: {
+    ...Typography.Body2,
     color: Colors.TextSecondary,
+    fontWeight: '500',
   },
   progressPercentLabel: {
     ...Typography.Caption,
     color: Colors.TextSecondary,
-    marginTop: 2,
     marginBottom: Spacing.xs,
   },
   progressBarTrack: {
-    height: 8,
+    height: 6,
     backgroundColor: Colors.WarmSand,
     borderRadius: Shapes.PillButton,
     overflow: 'hidden',
@@ -377,7 +393,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: Spacing.md,
+    marginTop: Spacing.sm,
   },
   openEndedBadge: {
     borderWidth: 1,

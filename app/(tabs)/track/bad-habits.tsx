@@ -78,12 +78,7 @@ export default function BadHabitListScreen() {
           <Text style={styles.headerTitle}>Bad Habits</Text>
           <Text style={styles.headerSubtitle}>{getDateString()}</Text>
         </View>
-        <Pressable
-          style={({ pressed }) => [styles.addButton, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
-          onPress={() => router.push('/track/add-edit-bad-habit' as any)}
-        >
-          <Ionicons name="add" size={24} color={Colors.SteelBlue} />
-        </Pressable>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -176,6 +171,10 @@ export default function BadHabitListScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.fab,
+            {
+              right: Spacing.screenH + 22,
+              bottom: insets.bottom + 70,
+            },
             { transform: [{ scale: pressed ? 0.94 : 1 }] },
           ]}
           onPress={() => router.push('/track/add-edit-bad-habit' as any)}
@@ -224,14 +223,6 @@ const styles = StyleSheet.create({
     ...Typography.Body2,
     color: Colors.TextSecondary,
     marginTop: 2,
-  },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: Shapes.IconBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
   },
   loadingContainer: {
     flex: 1,
@@ -390,8 +381,6 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: Spacing.lg,
-    right: Spacing.lg,
     width: 56,
     height: 56,
     borderRadius: 28,

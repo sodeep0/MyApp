@@ -142,7 +142,7 @@ export default function BadHabitDetailScreen() {
 
   if (loading || !habit) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.headerBtn}>
             <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
@@ -188,7 +188,7 @@ export default function BadHabitDetailScreen() {
   const milestoneMsg = nearestMilestone ? MILESTONE_MESSAGES[nearestMilestone] : null;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <RelapseSheet
         visible={showRelapse}
         onClose={() => setShowRelapse(false)}
@@ -442,37 +442,40 @@ export default function BadHabitDetailScreen() {
             <Text style={styles.emptyLogSub}>Tap &quot;I Resisted&quot; to start tracking your progress</Text>
           </View>
         )}
-      </ScrollView>
 
-      {/* Sticky CTAs */}
-      <View style={[styles.stickyBar, { paddingBottom: insets.bottom + Spacing.md }]}>
-        <Pressable
-          onPress={handleResisted}
-          style={({ pressed }) => [
-            styles.resistBtn,
-            { transform: [{ scale: pressed ? 0.96 : 1 }] },
-          ]}
-        >
-          <LinearGradient
-            colors={[Colors.Success, '#6DD5A0']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.resistBtnGradient}
-          >
-            <Ionicons name="shield-checkmark-outline" size={20} color={Colors.Surface} style={{ marginRight: Spacing.sm }} />
-            <Text style={styles.resistBtnText}>I Resisted</Text>
-          </LinearGradient>
-        </Pressable>
-        <Pressable
-          onPress={() => setShowRelapse(true)}
-          style={({ pressed }) => [
-            styles.relapseBtn,
-            { transform: [{ scale: pressed ? 0.96 : 1 }] },
-          ]}
-        >
-          <Text style={styles.relapseBtnText}>Log Relapse</Text>
-        </Pressable>
-      </View>
+        {/* Action Buttons */}
+        <View style={styles.actionSection}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.actionRow}>
+            <Pressable
+              onPress={handleResisted}
+              style={({ pressed }) => [
+                styles.resistBtn,
+                { transform: [{ scale: pressed ? 0.96 : 1 }] },
+              ]}
+            >
+              <LinearGradient
+                colors={[Colors.Success, '#6DD5A0']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.resistBtnGradient}
+              >
+                <Ionicons name="shield-checkmark-outline" size={20} color={Colors.Surface} style={{ marginRight: Spacing.sm }} />
+                <Text style={styles.resistBtnText}>I Resisted</Text>
+              </LinearGradient>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowRelapse(true)}
+              style={({ pressed }) => [
+                styles.relapseBtn,
+                { transform: [{ scale: pressed ? 0.96 : 1 }] },
+              ]}
+            >
+              <Text style={styles.relapseBtnText}>Log Relapse</Text>
+            </Pressable>
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -487,7 +490,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
   },
   headerBtn: {
@@ -645,7 +648,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 1,
     backgroundColor: Colors.SurfaceContainerLow,
   },
   calendarCellClean: {
@@ -824,18 +826,13 @@ const styles = StyleSheet.create({
     color: Colors.TextSecondary,
     textAlign: 'center',
   },
-  stickyBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  actionSection: {
+    marginBottom: Spacing.md,
+  },
+  actionRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.BorderSubtle,
-    backgroundColor: Colors.Surface,
+    marginTop: Spacing.sm,
   },
   resistBtn: {
     flex: 2,

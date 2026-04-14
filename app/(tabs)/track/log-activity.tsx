@@ -158,7 +158,7 @@ export default function LogActivityScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -313,7 +313,7 @@ export default function LogActivityScreen() {
         <View style={{ height: Spacing.xl }} />
       </ScrollView>
 
-      <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md }]}>
+      <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md + 70 }]}>
         <Pressable
           onPress={handleSave}
           disabled={!canSave}

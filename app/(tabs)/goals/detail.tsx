@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, LayoutAnimation } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
@@ -16,6 +17,7 @@ const QUICK_LOG_VALUES = ['0.5', '1', '1.5', '2'];
 export default function GoalDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const [goal, setGoal] = useState<Goal | null>(null);
   const [milestonesCollapsed, setMilestonesCollapsed] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -125,7 +127,7 @@ export default function GoalDetailScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -143,7 +145,10 @@ export default function GoalDetailScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: !isCompleted ? 160 : 120 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.infoSection}>
@@ -297,11 +302,11 @@ export default function GoalDetailScreen() {
           </View>
         )}
 
-        <View style={{ height: Spacing.xl }} />
+        <View style={{ height: Spacing.md }} />
       </ScrollView>
 
       {!isCompleted && (
-        <View style={styles.ctaContainer}>
+        <View style={[styles.ctaContainer, { bottom: insets.bottom + 70 }]}>
           <Pressable
             style={({ pressed }) => [
               styles.ctaButton,
@@ -334,7 +339,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
   },
   headerBtn: {

@@ -81,12 +81,7 @@ export default function ActivityLogScreen() {
           <Text style={styles.headerTitle}>Activity Log</Text>
           <Text style={styles.headerSubtitle}>{getDateString()}</Text>
         </View>
-        <Pressable
-          style={({ pressed }) => [styles.addButton, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
-          onPress={() => router.push('/track/log-activity' as any)}
-        >
-          <Ionicons name="add" size={24} color={Colors.SteelBlue} />
-        </Pressable>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -216,7 +211,14 @@ export default function ActivityLogScreen() {
       </ScrollView>
 
       <Pressable
-        style={({ pressed }) => [styles.fab, { transform: [{ scale: pressed ? 0.94 : 1 }] }]}
+        style={({ pressed }) => [
+          styles.fab,
+          {
+            right: Spacing.screenH + 22,
+            bottom: insets.bottom + 70,
+          },
+          { transform: [{ scale: pressed ? 0.94 : 1 }] },
+        ]}
         onPress={() => router.push('/track/log-activity' as any)}
       >
         <Ionicons name="add" size={28} color={Colors.Surface} />
@@ -262,14 +264,6 @@ const styles = StyleSheet.create({
     ...Typography.Body2,
     color: Colors.TextSecondary,
     marginTop: 2,
-  },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: Shapes.IconBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
   },
   scrollContent: {
     padding: Spacing.md,
@@ -446,8 +440,6 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: Spacing.lg,
-    right: Spacing.lg,
     width: 56,
     height: 56,
     borderRadius: 28,

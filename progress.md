@@ -1,8 +1,28 @@
 # Kaarma — Implementation Progress
 
-> Last updated: 2026-04-11 | Status: Expo React Native (TypeScript) prototype phase
+> Last updated: 2026-04-14 | Status: Expo React Native (TypeScript) prototype phase
 >
 > **Stack**: Expo SDK 54 · Expo Router v6 · React Native 0.81.5 · React 19 · TypeScript 5.9
+
+---
+
+## Recent Update (2026-04-14)
+
+- Goals tab aligned with Habits styling:
+  - `Active/Completed` filters now use Habits-style chips.
+  - Removed Goals view toggle; card view is now the only view.
+  - `+` button placement now matches Home/Habits.
+- Floating `+` button position standardized:
+  - Applied to Habits, Goals, Bad Habits, and Activity Log.
+  - Removed duplicate top-right add buttons where FAB exists.
+- Safe-area and bottom overlap fixes:
+  - Goal Detail, Bad Habit Detail, Journal Entry, and Log Activity updated for notch-safe headers.
+  - Bottom CTA areas adjusted to clear floating tab bar.
+- Bad Habit Detail UX polish:
+  - Removed fixed bottom CTAs; added in-page Quick Actions section.
+  - Fixed calendar week rendering so all 7 days show correctly.
+- Track hub enhancement:
+  - Added a `Recent` section with latest 3 merged logs from Bad Habits, Activity, and Journal.
 
 ---
 
@@ -162,7 +182,7 @@
 | Severity badges | ✅ | Mild (green), Moderate (yellow), Severe (red) |
 | "Add Bad Habit" card | ✅ | Dashed border |
 | Privacy warning banner | ✅ | "Stored locally and encrypted" |
-| Bad Habit Detail screen | ✅ | Days clean counter, resisted/relapse CTAs, trigger tags, urge log |
+| Bad Habit Detail screen | ✅ | Days clean counter, in-page quick actions (resisted/relapse), trigger tags, urge log |
 | Add/Edit Bad Habit screen | ✅ | Name, category, severity, quit date, notes form |
 | Free tier limit: 2 max | 🔴 | Not enforced |
 | Sensitive data encryption | ❌ | No encryption layer |
@@ -214,7 +234,7 @@
 | Feature | Status | Notes |
 |---------|--------|-------|
 | List screen | ✅ | Header, filter tabs, goal cards, FAB |
-| Filter tabs | ✅ | Active, Completed, All — with counts |
+| Filter tabs | ✅ | Active, Completed (habit-style chips) |
 | Goal cards | ✅ | Icon box, title, gradient progress bar, percentage, deadline |
 | Empty state | ✅ | Icon + "No goals yet" + CTA |
 | FAB | ✅ | Bottom-right "+ Add Goal" (card/timeline view toggle) |

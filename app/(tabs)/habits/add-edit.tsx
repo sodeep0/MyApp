@@ -200,14 +200,22 @@ export default function AddEditHabitScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.sectionTitle}>Name</Text>
-        <TextInput
-          style={styles.nameInput}
-          placeholder="Enter habit name"
-          placeholderTextColor={Colors.TextMuted}
-          value={name}
-          onChangeText={setName}
-          maxLength={50}
-        />
+        <View style={styles.inputWrapper}>
+          <Ionicons
+            name="checkmark-circle-outline"
+            size={18}
+            color={Colors.TextSecondary}
+            style={styles.inputIcon}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Enter habit name"
+            placeholderTextColor={Colors.DustyTaupe}
+            value={name}
+            onChangeText={setName}
+            maxLength={50}
+          />
+        </View>
         <Text style={styles.charCount}>{name.length}/50</Text>
 
         <Text style={styles.sectionTitle}>Icon</Text>
@@ -415,20 +423,28 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
     marginTop: Spacing.lg,
   },
-  nameInput: {
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 52,
     backgroundColor: Colors.Background,
     borderColor: Colors.DustyTaupe,
     borderWidth: 1,
     borderRadius: Shapes.Input,
     paddingHorizontal: Spacing.md,
+  },
+  inputIcon: {
+    marginRight: Spacing.sm,
+  },
+  input: {
+    flex: 1,
     paddingVertical: Spacing.md,
-    height: 52,
-    ...Typography.Headline2,
+    ...Typography.Body1,
     color: Colors.TextPrimary,
   },
   charCount: {
     ...Typography.Micro,
-    color: Colors.TextMuted,
+    color: Colors.TextSecondary,
     textAlign: 'right',
     marginTop: 4,
   },

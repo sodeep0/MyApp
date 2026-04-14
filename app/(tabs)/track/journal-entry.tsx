@@ -183,7 +183,7 @@ export default function JournalEntryScreen() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.headerBtn}>
             <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
@@ -196,7 +196,7 @@ export default function JournalEntryScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -211,7 +211,7 @@ export default function JournalEntryScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -348,7 +348,7 @@ export default function JournalEntryScreen() {
       </ScrollView>
 
       {/* CTA */}
-      <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md }]}>
+      <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md + 70 }]}>
         <Pressable
           onPress={handleSave}
           disabled={!canSave}
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
   },
   headerBtn: {

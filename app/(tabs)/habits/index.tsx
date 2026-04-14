@@ -10,7 +10,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
-import { FAB, Button } from '@/components/Button';
+import { Button } from '@/components/Button';
 import { RingProgress } from '@/components/RingProgress';
 import {
   getAllHabits,
@@ -282,7 +282,6 @@ export default function HabitListScreen() {
           <Text style={styles.headerTitle}>My Habits</Text>
           <Text style={styles.headerSubtitle}>{getDateString()}</Text>
         </View>
-        <FAB icon="add" onPress={() => router.push('/(tabs)/habits/add-edit' as any)} />
       </View>
 
       <ScrollView
@@ -353,8 +352,21 @@ export default function HabitListScreen() {
             )}
           </View>
         )}
-        <View style={{ height: 32 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
+
+      <Pressable
+        onPress={() => router.push('/(tabs)/habits/add-edit' as any)}
+        style={{
+          position: 'absolute',
+          right: Spacing.screenH + 22,
+          bottom: insets.bottom + 70,
+        }}
+      >
+        <View style={styles.fabCircle}>
+          <Ionicons name="add" size={27} color={Colors.Surface} />
+        </View>
+      </Pressable>
     </View>
   );
 }
@@ -627,5 +639,14 @@ const styles = StyleSheet.create({
     ...Typography.Caption,
     color: Colors.SteelBlue,
     fontWeight: '600',
+  },
+  fabCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.TextPrimary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.FAB,
   },
 });
