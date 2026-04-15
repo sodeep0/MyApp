@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function hasUserId(uid) {
+      return request.resource.data.userId is string && request.resource.data.userId == uid;
+    }
+
+    function existingHasUserId(uid) {
+      return resource.data.userId is string && resource.data.userId == uid;
+    }
+
+    // Synced module: user profile
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid);
+      allow delete: if false;
+
+      // Synced module: habits
+      match /habits/{habitId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && hasUserId(uid);
+        allow update: if isOwner(uid) && existingHasUserId(uid) && hasUserId(uid);
+        allow delete: if isOwner(uid) && existingHasUserId(uid);
+
+        // Optional completion subcollection model
+        match /completions/{completionId} {
+          allow read: if isOwner(uid);
+          allow create: if isOwner(uid) && hasUserId(uid);
+          allow update: if isOwner(uid) && existingHasUserId(uid) && hasUserId(uid);
+          allow delete: if isOwner(uid) && existingHasUserId(uid);
+        }
+      }
+
+      // Synced module: goals
+      match /goals/{goalId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && hasUserId(uid);
+        allow update: if isOwner(uid) && existingHasUserId(uid) && hasUserId(uid);
+        allow delete: if isOwner(uid) && existingHasUserId(uid);
+      }
+
+      // Synced module: activity logs
+      match /activities/{activityId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && hasUserId(uid);
+        allow update: if isOwner(uid) && existingHasUserId(uid) && hasUserId(uid);
+        allow delete: if isOwner(uid) && existingHasUserId(uid);
+      }
+    }
+
+    // Sensitive modules are local-only in Phase 1.
+    // Explicit deny for known names (defense in depth).
+    match /journal/{docId} {
+      allow read, write: if false;
+    }
+
+    match /journals/{docId} {
+      allow read, write: if false;
+    }
+
+    match /badHabits/{docId} {
+      allow read, write: if false;
+    }
+
+    match /urgeEvents/{docId} {
+      allow read, write: if false;
+    }
+
+    // Default deny-all fallback.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

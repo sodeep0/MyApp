@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, LayoutAnimation } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, LayoutAnimation } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { safeBack } from '@/navigation/safeBack';
 import { getGoalById, updateGoal, toggleMilestone } from '@/stores/goalStore';
 import { type Goal, GoalStatus } from '@/types/models';
 
@@ -21,6 +22,8 @@ export default function GoalDetailScreen() {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [milestonesCollapsed, setMilestonesCollapsed] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -103,22 +106,32 @@ export default function GoalDetailScreen() {
   };
 
   const handleMarkComplete = () => {
-    Alert.alert(
-      'Mark as Complete?',
-      'Are you sure you want to mark this goal as completed?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Complete',
-          onPress: async () => {
-            if (id) {
-              await updateGoal(id as string, { status: GoalStatus.COMPLETED, completedAt: new Date().toISOString() });
-            }
-            setIsCompleted(true);
-          },
-        },
-      ]
-    );
+    setShowCompleteModal(true);
+  };
+
+  const confirmMarkComplete = async () => {
+    if (isCompleting) return;
+    setIsCompleting(true);
+
+    try {
+      const completedAt = new Date().toISOString();
+      if (id) {
+        await updateGoal(id as string, { status: GoalStatus.COMPLETED, completedAt });
+      }
+
+      setGoal((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: GoalStatus.COMPLETED,
+          completedAt,
+        };
+      });
+      setIsCompleted(true);
+      setShowCompleteModal(false);
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   const toggleCollapse = () => {
@@ -130,7 +143,7 @@ export default function GoalDetailScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack(router, '/(tabs)/goals')}
           style={({ pressed }) => [styles.headerBtn, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
@@ -306,11 +319,11 @@ export default function GoalDetailScreen() {
       </ScrollView>
 
       {!isCompleted && (
-        <View style={[styles.ctaContainer, { bottom: insets.bottom + 70 }]}>
+        <View style={[styles.ctaContainer, { bottom: insets.bottom + 70 }]}> 
           <Pressable
             style={({ pressed }) => [
               styles.ctaButton,
-              { transform: [{ scale: pressed ? 0.98 : 1 }] },
+              { transform: [{ scale: pressed ? 0.985 : 1 }] },
             ]}
             onPress={handleMarkComplete}
           >
@@ -320,11 +333,70 @@ export default function GoalDetailScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.ctaGradient}
             >
-              <Text style={styles.ctaText}>Mark as Complete</Text>
+              <Ionicons name="checkmark-done-circle" size={18} color={Colors.Surface} />
+              <Text style={styles.ctaText}>Mark as Completed</Text>
             </LinearGradient>
           </Pressable>
         </View>
       )}
+
+      <Modal
+        visible={showCompleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isCompleting) {
+            setShowCompleteModal(false);
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconWrap}>
+              <Ionicons name="checkmark-done-circle" size={24} color={Colors.SteelBlue} />
+            </View>
+            <Text style={styles.modalTitle}>Mark this goal as completed?</Text>
+            <Text style={styles.modalMessage}>
+              This will move the goal to completed and lock in your progress.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setShowCompleteModal(false)}
+                disabled={isCompleting}
+                style={({ pressed }) => [
+                  styles.modalCancelBtn,
+                  isCompleting && styles.modalBtnDisabled,
+                  { transform: [{ scale: pressed && !isCompleting ? 0.98 : 1 }] },
+                ]}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={confirmMarkComplete}
+                disabled={isCompleting}
+                style={({ pressed }) => [
+                  styles.modalConfirmBtn,
+                  isCompleting && styles.modalBtnDisabled,
+                  { transform: [{ scale: pressed && !isCompleting ? 0.98 : 1 }] },
+                ]}
+              >
+                <LinearGradient
+                  colors={gradientColors}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalConfirmGradient}
+                >
+                  <Text style={styles.modalConfirmText}>
+                    {isCompleting ? 'Saving...' : 'Mark Completed'}
+                  </Text>
+                </LinearGradient>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -585,15 +657,92 @@ const styles = StyleSheet.create({
   ctaButton: {
     borderRadius: Shapes.Button,
     overflow: 'hidden',
+    ...Shadows.Card,
   },
   ctaGradient: {
-    paddingVertical: Spacing.md,
+    minHeight: 54,
+    paddingHorizontal: Spacing.lg,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
   },
   ctaText: {
     ...Typography.Body1,
     fontWeight: '700',
     color: Colors.Surface,
     letterSpacing: 0.4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: Colors.OverlayLight,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.screenH,
+  },
+  modalCard: {
+    backgroundColor: Colors.Surface,
+    borderRadius: Shapes.Card,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    padding: Spacing.lg,
+    ...Shadows.Modal,
+  },
+  modalIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.SteelBlue + '18',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+  modalTitle: {
+    ...Typography.Headline2,
+    color: Colors.TextPrimary,
+  },
+  modalMessage: {
+    ...Typography.Body2,
+    color: Colors.TextSecondary,
+    marginTop: Spacing.xs,
+    lineHeight: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: Shapes.Button,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.WarmSand + '45',
+  },
+  modalCancelText: {
+    ...Typography.Body2,
+    color: Colors.TextPrimary,
+    fontWeight: '600',
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    borderRadius: Shapes.Button,
+    overflow: 'hidden',
+  },
+  modalConfirmGradient: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+  },
+  modalConfirmText: {
+    ...Typography.Body2,
+    color: Colors.Surface,
+    fontWeight: '700',
+  },
+  modalBtnDisabled: {
+    opacity: 0.7,
   },
 });

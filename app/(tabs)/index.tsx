@@ -252,6 +252,8 @@ export default function HomeScreen() {
   const displayNameStr = String(displayName).split(" ")[0] || "User";
   const maxStreak =
     Object.values(streaks).length > 0 ? Math.max(...Object.values(streaks)) : 0;
+  const recoveryProgress = Math.min(bestStreakDays / 30, 1);
+  const recoveryPct = Math.round(recoveryProgress * 100);
 
   const toggleComplete = async (habitId: string) => {
     if (todayDone.has(habitId)) {
@@ -355,12 +357,18 @@ export default function HomeScreen() {
         {/* ── Quick Action Row ────────────────────── */}
         <View style={styles.quickActionsRow}>
           {QUICK_ACTIONS.map((action) => (
-            <AnimatedPressable
+            <Pressable
               key={action.label}
               onPress={() => {
                 router.push(action.route as any);
               }}
-              style={styles.quickActionWrapper}
+              style={({ pressed }) => [
+                styles.quickActionWrapper,
+                {
+                  opacity: pressed ? 0.7 : 1,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                },
+              ]}
             >
               <View style={styles.quickActionCard}>
                 <Ionicons
@@ -370,7 +378,7 @@ export default function HomeScreen() {
                 />
                 <Text style={styles.quickActionLabel}>{action.label}</Text>
               </View>
-            </AnimatedPressable>
+            </Pressable>
           ))}
         </View>
 
@@ -444,47 +452,50 @@ export default function HomeScreen() {
         {/* ── Bad Habit Tracker Snapshot ──────────── */}
         {badHabits.length > 0 && (
           <View style={styles.badHabitSection}>
-            <AnimatedPressable
+            <Pressable
               onPress={() => router.push("/(tabs)/track/bad-habits" as any)}
+              style={({ pressed }) => [
+                styles.badHabitCardWrapper,
+                { transform: [{ scale: pressed ? 0.98 : 1 }] },
+              ]}
             >
               <Card style={styles.badHabitCard} padding={Spacing.md}>
-                <View style={styles.badHabitRow}>
-                  <View style={styles.badHabitShieldBg}>
-                    <Ionicons
-                      name="shield-checkmark"
-                      size={22}
-                      color={hasRelapsed ? Colors.Danger : Colors.Success}
+                <View style={styles.badHabitCategoryBadge}>
+                  <Text style={styles.badHabitCategoryText}>RECOVERY TRACKER</Text>
+                </View>
+                <Text style={styles.badHabitCardTitle} numberOfLines={2}>
+                  {hasRelapsed ? "Bounce back from relapse" : `${bestStreakDays} days clean`}
+                </Text>
+                <View style={styles.badHabitProgress}>
+                  <View style={styles.badHabitBarBg}>
+                    <View
+                      style={[
+                        styles.badHabitBarFill,
+                        {
+                          width: `${Math.max(hasRelapsed ? 6 : recoveryPct, 6)}%`,
+                          backgroundColor: hasRelapsed ? Colors.Danger : Colors.Success,
+                        },
+                      ]}
                     />
                   </View>
-                  <View style={styles.badHabitInfo}>
-                    {hasRelapsed ? (
-                      <>
-                        <Text style={styles.badHabitDaysRelapsed}>
-                          Relapsed
-                        </Text>
-                        <Text style={styles.badHabitCTA}>
-                          Restart your streak
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.badHabitDaysClean}>
-                          {bestStreakDays} days clean
-                        </Text>
-                        <Text style={styles.badHabitSubtext}>
-                          {"Keep going — you're doing great"}
-                        </Text>
-                      </>
-                    )}
-                  </View>
+                  <Text style={styles.badHabitProgressText}>
+                    {hasRelapsed ? "Reset" : `${recoveryPct}%`}
+                  </Text>
+                </View>
+                <View style={styles.badHabitFooter}>
+                  <Text style={styles.badHabitSubtext}>
+                    {hasRelapsed
+                      ? "Restart your streak and keep moving"
+                      : `${badHabits.length} habits tracked`}
+                  </Text>
                   <Ionicons
                     name="chevron-forward"
-                    size={20}
+                    size={18}
                     color={Colors.TextSecondary}
                   />
                 </View>
               </Card>
-            </AnimatedPressable>
+            </Pressable>
           </View>
         )}
 
@@ -531,6 +542,7 @@ export default function HomeScreen() {
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.carousel}
+              contentContainerStyle={styles.carouselContent}
             >
               {activeGoals.map((goal) => {
                 const goalProgress =
@@ -539,12 +551,15 @@ export default function HomeScreen() {
                     : 0;
                 const pct = Math.round(goalProgress * 100);
                 return (
-                  <AnimatedPressable
+                  <Pressable
                     key={goal.id}
                     onPress={() =>
                       router.push(`/goals/detail?id=${goal.id}` as any)
                     }
-                    style={styles.carouselCardWrapper}
+                    style={({ pressed }) => [
+                      styles.carouselCardWrapper,
+                      { transform: [{ scale: pressed ? 0.98 : 1 }] },
+                    ]}
                   >
                     <Card padding={Spacing.md} style={styles.goalCarouselCard}>
                       <View style={styles.goalCategoryBadge}>
@@ -585,7 +600,7 @@ export default function HomeScreen() {
                         </Text>
                       )}
                     </Card>
-                  </AnimatedPressable>
+                  </Pressable>
                 );
               })}
             </ScrollView>
@@ -896,48 +911,65 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenH,
     marginBottom: Spacing.md,
   },
-  badHabitCard: {
-    borderColor: Colors.BorderSubtle,
-    borderWidth: 1,
+  badHabitCardWrapper: {
+    borderRadius: Shapes.Card,
   },
-  badHabitRow: {
+  badHabitCard: {
+    borderRadius: Shapes.Card,
+  },
+  badHabitCategoryBadge: {
+    borderRadius: Shapes.Chip,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    backgroundColor: Colors.WarmSand,
+    alignSelf: "flex-start",
+    marginBottom: Spacing.xs,
+  },
+  badHabitCategoryText: {
+    ...Typography.Micro,
+    fontWeight: "600" as const,
+    textTransform: "uppercase" as const,
+    color: Colors.TextPrimary,
+  },
+  badHabitCardTitle: {
+    ...Typography.Headline2,
+    color: Colors.TextPrimary,
+    marginBottom: Spacing.sm,
+  },
+  badHabitProgress: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.md,
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
-  badHabitShieldBg: {
-    width: 44,
-    height: 44,
-    borderRadius: Shapes.IconBg,
-    backgroundColor: Colors.Success + "18",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  badHabitInfo: {
+  badHabitBarBg: {
     flex: 1,
+    height: 8,
+    backgroundColor: Colors.WarmSand,
+    borderRadius: Shapes.PillButton,
+    overflow: "hidden",
   },
-  badHabitDaysClean: {
-    ...Typography.Headline2,
-    color: Colors.Success,
-    fontSize: 18,
-    lineHeight: 24,
+  badHabitBarFill: {
+    height: "100%",
+    borderRadius: Shapes.PillButton,
   },
-  badHabitDaysRelapsed: {
-    ...Typography.Headline2,
-    color: Colors.Danger,
-    fontSize: 18,
-    lineHeight: 24,
+  badHabitProgressText: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    fontWeight: "600" as const,
+    minWidth: 40,
+    textAlign: "right" as const,
+  },
+  badHabitFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
   },
   badHabitSubtext: {
-    ...Typography.Body2,
+    ...Typography.Caption,
     color: Colors.TextSecondary,
-    marginTop: 2,
-  },
-  badHabitCTA: {
-    ...Typography.Body2,
-    color: Colors.Danger,
-    fontWeight: "600" as const,
-    marginTop: 2,
+    flex: 1,
   },
 
   // ── Journal Prompt Card ──────────────────────────────
@@ -974,8 +1006,10 @@ const styles = StyleSheet.create({
   // ── Goals Carousel ────────────────────────────────────
   carousel: {
     marginTop: Spacing.xs,
-    marginHorizontal: -Spacing.screenH,
-    paddingHorizontal: Spacing.screenH,
+  },
+  carouselContent: {
+    paddingLeft: Spacing.screenH,
+    paddingRight: Spacing.screenH - Spacing.sm,
   },
   carouselCardWrapper: {
     width: 260,

@@ -1,9 +1,10 @@
 // Habit store — manages habits and completions
 import type { Habit, HabitCompletion } from '../types/models';
-import { generateUUID } from './baseStore';
+import { getHabitRepository } from '@/repositories/factory';
 
-const HABITS_KEY = 'kaarma_habits';
-const COMPLETIONS_KEY = 'kaarma_habit_completions';
+function repo() {
+  return getHabitRepository();
+}
 
 /**
  * Returns today's date as ISO "YYYY-MM-DD" in local timezone.
@@ -19,98 +20,51 @@ export function todayStr(): string {
 // ─── Habits ──────────────────────────────────────────────────────────────────
 
 export async function getAllHabits(): Promise<Habit[]> {
-  const { storage } = await import('../storage/asyncStorage');
-  return (await storage.getItem<Habit[]>(HABITS_KEY)) ?? [];
+  return repo().getAllHabits();
 }
 
 export async function getHabitById(id: string): Promise<Habit | undefined> {
-  const habits = await getAllHabits();
-  return habits.find((h) => h.id === id);
+  return repo().getHabitById(id);
 }
 
 export async function saveHabits(habits: Habit[]): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  await storage.setItem(HABITS_KEY, habits);
+  await repo().saveHabits(habits);
 }
 
 export async function addHabit(
   data: Omit<Habit, 'id' | 'createdAt' | 'isArchived' | 'streakShieldsRemaining'>,
 ): Promise<Habit[]> {
-  const habits = await getAllHabits();
-  const newHabit: Habit = {
-    ...data,
-    id: generateUUID(),
-    createdAt: new Date().toISOString(),
-    isArchived: false,
-    streakShieldsRemaining: 0,
-  };
-  await saveHabits([...habits, newHabit]);
-  return habits; // return the full list after add
+  return repo().addHabit(data);
 }
 
 export async function updateHabit(id: string, updates: Partial<Habit>): Promise<Habit | null> {
-  const habits = await getAllHabits();
-  const idx = habits.findIndex((h) => h.id === id);
-  if (idx === -1) return null;
-  habits[idx] = { ...habits[idx], ...updates };
-  await saveHabits(habits);
-  return habits[idx];
+  return repo().updateHabit(id, updates);
 }
 
 export async function deleteHabit(id: string): Promise<void> {
-  const habits = await getAllHabits();
-  await saveHabits(habits.filter((h) => h.id !== id));
-  // Also delete completions for this habit
-  const completions = await getCompletionsForHabit(id);
-  await saveCompletions(completions.filter((c) => c.habitId !== id));
+  await repo().deleteHabit(id);
 }
 
 // ─── Completions ─────────────────────────────────────────────────────────────
 
 export async function getCompletionsForHabit(habitId: string): Promise<HabitCompletion[]> {
-  const { storage } = await import('../storage/asyncStorage');
-  const all = (await storage.getItem<HabitCompletion[]>(COMPLETIONS_KEY)) ?? [];
-  return all.filter((c) => c.habitId === habitId);
+  return repo().getCompletionsForHabit(habitId);
 }
 
 export async function getTodayCompletionsForHabit(habitId: string): Promise<HabitCompletion[]> {
-  const completions = await getCompletionsForHabit(habitId);
-  const today = todayStr();
-  return completions.filter((c) => c.completedDate === today);
+  return repo().getTodayCompletionsForHabit(habitId);
 }
 
 export async function saveCompletions(completions: HabitCompletion[]): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  await storage.setItem(COMPLETIONS_KEY, completions);
+  await repo().saveCompletions(completions);
 }
 
 export async function markHabitComplete(habitId: string): Promise<HabitCompletion> {
-  const { storage } = await import('../storage/asyncStorage');
-  const all = (await storage.getItem<HabitCompletion[]>(COMPLETIONS_KEY)) ?? [];
-  const today = todayStr();
-
-  // Don't double-complete
-  const exists = all.find((c) => c.habitId === habitId && c.completedDate === today);
-  if (exists) return exists;
-
-  const completion: HabitCompletion = {
-    id: generateUUID(),
-    habitId,
-    completedDate: today,
-    completedAt: new Date().toISOString(),
-  };
-  await storage.setItem(COMPLETIONS_KEY, [...all, completion]);
-  return completion;
+  return repo().markHabitComplete(habitId);
 }
 
 export async function unmarkHabitComplete(habitId: string): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  const all = (await storage.getItem<HabitCompletion[]>(COMPLETIONS_KEY)) ?? [];
-  const today = todayStr();
-  await storage.setItem(
-    COMPLETIONS_KEY,
-    all.filter((c) => !(c.habitId === habitId && c.completedDate === today)),
-  );
+  await repo().unmarkHabitComplete(habitId);
 }
 
 /**

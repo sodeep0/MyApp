@@ -12,6 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { safeBack } from '@/navigation/safeBack';
 import { addBadHabit, updateBadHabit, getBadHabitById } from '@/stores/badHabitStore';
 import { BadHabitCategory, BadHabitSeverity } from '@/types/models';
 
@@ -41,6 +42,7 @@ export default function AddEditBadHabitScreen() {
   const { id } = useLocalSearchParams();
   const isEditing = !!id;
   const [isLoading, setIsLoading] = useState(isEditing);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<BadHabitCategory>(BadHabitCategory.BEHAVIORAL);
@@ -65,30 +67,40 @@ export default function AddEditBadHabitScreen() {
   }, [id, isEditing]);
 
   const handleSave = async () => {
+    if (isLoading || isSaving) return;
+
     if (!name.trim()) {
       Alert.alert('Missing Name', 'Please enter a name for this habit.');
       return;
     }
 
-    if (isEditing) {
-      await updateBadHabit(id as string, {
-        name: name.trim(),
-        category,
-        severity,
-        quitDate,
-        notes: notes.trim() || null,
-      });
-    } else {
-      await addBadHabit({
-        userId: 'local',
-        name: name.trim(),
-        category,
-        severity,
-        quitDate,
-        notes: notes.trim() || null,
-      });
+    setIsSaving(true);
+    try {
+      if (isEditing) {
+        await updateBadHabit(id as string, {
+          name: name.trim(),
+          category,
+          severity,
+          quitDate,
+          notes: notes.trim() || null,
+        });
+      } else {
+        await addBadHabit({
+          userId: 'local',
+          name: name.trim(),
+          category,
+          severity,
+          quitDate,
+          notes: notes.trim() || null,
+        });
+      }
+      safeBack(router, '/(tabs)/track/bad-habits');
+    } catch (error) {
+      console.error('Failed to save bad habit:', error);
+      Alert.alert('Error', 'Failed to save bad habit. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-    router.back();
   };
 
   const canSave = name.trim().length > 0;
@@ -96,8 +108,8 @@ export default function AddEditBadHabitScreen() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.headerBtn}>
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
+          <Pressable onPress={() => safeBack(router, '/(tabs)/track/bad-habits')} style={styles.headerBtn}>
             <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
           </Pressable>
           <Text style={styles.headerTitle}>Loading...</Text>
@@ -109,9 +121,9 @@ export default function AddEditBadHabitScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack(router, '/(tabs)/track/bad-habits')}
           style={({ pressed }) => [styles.headerBtn, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
@@ -123,7 +135,7 @@ export default function AddEditBadHabitScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -164,16 +176,30 @@ export default function AddEditBadHabitScreen() {
                 onPress={() => setCategory(cat.key as BadHabitCategory)}
                 style={({ pressed }) => [
                   styles.categoryCard,
-                  isActive && { borderColor: catColor, backgroundColor: catColor + '10' },
+                  isActive && [styles.categoryCardActive, { borderColor: catColor }],
                   { transform: [{ scale: pressed ? 0.96 : 1 }] },
                 ]}
               >
-                <View style={[styles.categoryIconWrap, { backgroundColor: catColor + '18' }]}>
-                  <Ionicons name={cat.icon} size={22} color={isActive ? catColor : Colors.TextSecondary} />
+                {isActive && <View style={[styles.categoryActiveGlow, { backgroundColor: catColor + '14' }]} />}
+                {isActive && (
+                  <View style={[styles.categorySelectedBadge, { backgroundColor: catColor + '20' }]}>
+                    <Ionicons name="checkmark" size={12} color={catColor} />
+                  </View>
+                )}
+
+                <View style={styles.categoryContent}>
+                  <View
+                    style={[
+                      styles.categoryIconWrap,
+                      { backgroundColor: isActive ? catColor + '20' : catColor + '12' },
+                    ]}
+                  >
+                    <Ionicons name={cat.icon} size={22} color={isActive ? catColor : Colors.TextSecondary} />
+                  </View>
+                  <Text style={[styles.categoryLabel, isActive && { color: catColor, fontWeight: '700' }]}>
+                    {cat.label}
+                  </Text>
                 </View>
-                <Text style={[styles.categoryLabel, isActive && { color: catColor, fontWeight: '600' }]}>
-                  {cat.label}
-                </Text>
               </Pressable>
             );
           })}
@@ -190,22 +216,42 @@ export default function AddEditBadHabitScreen() {
                 onPress={() => setSeverity(sev.key as BadHabitSeverity)}
                 style={({ pressed }) => [
                   styles.severityOption,
-                  isActive && styles.severityOptionActive,
-                  isActive && { borderColor: sev.color },
+                  isActive && [styles.severityOptionActive, { borderColor: sev.color }],
                   { transform: [{ scale: pressed ? 0.98 : 1 }] },
                 ]}
               >
-                <View style={styles.severityRadio}>
-                  {isActive && <View style={[styles.severityRadioDot, { backgroundColor: sev.color }]} />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.severityLabel, isActive && { color: sev.color }]}>
-                    {sev.label}
-                  </Text>
-                  <Text style={styles.severityDesc}>{sev.description}</Text>
-                </View>
-                <View style={[styles.severityBadge, { backgroundColor: sev.color + '18' }]}>
-                  <Text style={[styles.severityBadgeText, { color: sev.color }]}>{sev.label}</Text>
+                {isActive && <View style={[styles.severityActiveGlow, { backgroundColor: sev.color + '12' }]} />}
+                {isActive && (
+                  <View style={[styles.severitySelectedBadge, { backgroundColor: sev.color + '20' }]}>
+                    <Ionicons name="checkmark" size={12} color={sev.color} />
+                  </View>
+                )}
+
+                <View style={styles.severityContentRow}>
+                  <View style={[styles.severityRadio, isActive && { borderColor: sev.color }]}> 
+                    {isActive && <View style={[styles.severityRadioDot, { backgroundColor: sev.color }]} />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.severityLabel, isActive && { color: sev.color }]}> 
+                      {sev.label}
+                    </Text>
+                    <Text style={styles.severityDesc}>{sev.description}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.severityBadge,
+                      { backgroundColor: isActive ? sev.color + '22' : Colors.WarmSand },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.severityBadgeText,
+                        { color: isActive ? sev.color : Colors.TextSecondary },
+                      ]}
+                    >
+                      {sev.label}
+                    </Text>
+                  </View>
                 </View>
               </Pressable>
             );
@@ -254,14 +300,14 @@ export default function AddEditBadHabitScreen() {
       </ScrollView>
 
       {/* CTA */}
-      <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md }]}>
+      <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md + 70 }]}>
         <Pressable
           onPress={handleSave}
-          disabled={!canSave}
+          disabled={!canSave || isSaving || isLoading}
           style={({ pressed }) => [
             styles.ctaButton,
-            !canSave && styles.ctaButtonDisabled,
-            { transform: [{ scale: pressed && canSave ? 0.98 : 1 }] },
+            (!canSave || isSaving || isLoading) && styles.ctaButtonDisabled,
+            { transform: [{ scale: pressed && canSave && !isSaving && !isLoading ? 0.98 : 1 }] },
           ]}
         >
           <Ionicons name="checkmark-circle" size={20} color={Colors.Surface} style={{ marginRight: Spacing.sm }} />
@@ -284,7 +330,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.lg,
     paddingBottom: Spacing.md,
   },
   headerBtn: {
@@ -370,6 +415,36 @@ const styles = StyleSheet.create({
     borderColor: Colors.BorderSubtle,
     gap: Spacing.xs,
     ...Shadows.Card,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  categoryCardActive: {
+    borderWidth: 2,
+    shadowColor: Colors.TextPrimary,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  categoryActiveGlow: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  categoryContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    zIndex: 1,
+  },
+  categorySelectedBadge: {
+    position: 'absolute',
+    top: Spacing.xs,
+    right: Spacing.xs,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
   },
   categoryIconWrap: {
     width: 44,
@@ -396,9 +471,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.BorderSubtle,
     ...Shadows.Card,
+    overflow: 'hidden',
+    position: 'relative',
   },
   severityOptionActive: {
     backgroundColor: Colors.Surface,
+    borderWidth: 2,
+    shadowColor: Colors.TextPrimary,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  severityActiveGlow: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  severitySelectedBadge: {
+    position: 'absolute',
+    top: Spacing.xs,
+    right: Spacing.xs,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  severityContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    zIndex: 1,
   },
   severityRadio: {
     width: 20,

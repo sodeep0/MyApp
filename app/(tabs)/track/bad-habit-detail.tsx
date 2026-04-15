@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { safeBack } from '@/navigation/safeBack';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
 import { getBadHabitById, getUrgeEventsForHabit, logUrgeEvent, daysSinceQuit } from '@/stores/badHabitStore';
@@ -31,6 +32,9 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 const MILESTONES = [7, 14, 21, 30, 60, 90, 180, 365];
+const PREVIEW_LOG_COUNT = 4;
+
+type LogFilter = 'ALL' | 'RESISTED' | 'RELAPSE';
 
 const MILESTONE_MESSAGES: Record<number, string> = {
   7: 'One week strong! Keep going.',
@@ -43,15 +47,16 @@ const MILESTONE_MESSAGES: Record<number, string> = {
   365: 'One year. You did it.',
 };
 
-function getCalendarGrid(quitDate: string, relapseDates: string[]) {
+function getCalendarGrid(quitDate: string, relapseDates: string[], displayMonth: Date) {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
+  const year = displayMonth.getFullYear();
+  const month = displayMonth.getMonth();
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   const startPad = firstDay.getDay();
   const daysInMonth = lastDay.getDate();
-  const today = now.getDate();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const isCurrentMonth = now.getFullYear() === year && now.getMonth() === month;
 
   const quit = new Date(quitDate);
   const relapseSet = new Set(relapseDates);
@@ -63,7 +68,7 @@ function getCalendarGrid(quitDate: string, relapseDates: string[]) {
   for (let d = 1; d <= daysInMonth; d++) {
     const dateObj = new Date(year, month, d);
     const dateStr = dateObj.toISOString().slice(0, 10);
-    if (d > today) {
+    if (dateObj > todayStart) {
       cells.push({ day: d, status: 'future' });
     } else if (dateObj < quit) {
       cells.push({ day: d, status: 'pre' });
@@ -73,7 +78,11 @@ function getCalendarGrid(quitDate: string, relapseDates: string[]) {
       cells.push({ day: d, status: 'clean' });
     }
   }
-  return { cells, monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
+  return {
+    cells,
+    monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    todayDay: isCurrentMonth ? now.getDate() : null,
+  };
 }
 
 function getBestStreak(events: UrgeEvent[], quitDate: string): number {
@@ -101,6 +110,33 @@ function getTotalCleanDays(events: UrgeEvent[], quitDate: string): number {
   return Math.max(0, totalDays - relapseDays);
 }
 
+function formatEventDateLabel(isoDate: string): string {
+  const eventDate = new Date(isoDate);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const timeLabel = eventDate.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  if (eventDate.toDateString() === today.toDateString()) {
+    return `Today, ${timeLabel}`;
+  }
+
+  if (eventDate.toDateString() === yesterday.toDateString()) {
+    return `Yesterday, ${timeLabel}`;
+  }
+
+  return eventDate.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export default function BadHabitDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -109,6 +145,12 @@ export default function BadHabitDetailScreen() {
   const [urgeEvents, setUrgeEvents] = useState<UrgeEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRelapse, setShowRelapse] = useState(false);
+  const [logFilter, setLogFilter] = useState<LogFilter>('ALL');
+  const [showAllLogs, setShowAllLogs] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -144,7 +186,7 @@ export default function BadHabitDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.headerBtn}>
+          <Pressable onPress={() => safeBack(router, '/(tabs)/track/bad-habits')} style={styles.headerBtn}>
             <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
           </Pressable>
           <Text style={styles.headerTitle}>Loading...</Text>
@@ -172,17 +214,41 @@ export default function BadHabitDetailScreen() {
   });
   const sortedTriggers = Object.entries(triggerCounts).sort((a, b) => b[1] - a[1]);
 
-  const recentEvents = [...urgeEvents]
+  const sortedEvents = [...urgeEvents]
     .sort((a, b) => b.loggedAt.localeCompare(a.loggedAt))
-    .slice(0, 10);
+
+  const filteredEvents = sortedEvents.filter((event) => {
+    if (logFilter === 'ALL') return true;
+    return event.type === logFilter;
+  });
+
+  const visibleEvents = showAllLogs
+    ? filteredEvents
+    : filteredEvents.slice(0, PREVIEW_LOG_COUNT);
+
+  const hasMoreLogs = filteredEvents.length > PREVIEW_LOG_COUNT;
 
   const relapseDates = urgeEvents
     .filter((e) => e.type === 'RELAPSE' && e.resetCounter)
     .map((e) => e.loggedAt.slice(0, 10));
 
-  const cal = getCalendarGrid(habit.quitDate, relapseDates);
+  const cal = getCalendarGrid(habit.quitDate, relapseDates, calendarMonth);
   const bestStreak = getBestStreak(urgeEvents, habit.quitDate);
   const totalClean = getTotalCleanDays(urgeEvents, habit.quitDate);
+
+  const now = new Date();
+  const currentMonthIndex = now.getFullYear() * 12 + now.getMonth();
+  const viewedMonthIndex = calendarMonth.getFullYear() * 12 + calendarMonth.getMonth();
+  const isAtCurrentMonth = viewedMonthIndex >= currentMonthIndex;
+
+  const goToPreviousMonth = () => {
+    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const goToNextMonth = () => {
+    if (isAtCurrentMonth) return;
+    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
 
   const nearestMilestone = MILESTONES.filter((m) => m <= cleanDays).pop();
   const milestoneMsg = nearestMilestone ? MILESTONE_MESSAGES[nearestMilestone] : null;
@@ -198,7 +264,7 @@ export default function BadHabitDetailScreen() {
 
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack(router, '/(tabs)/track/bad-habits')}
           style={({ pressed }) => [styles.headerBtn, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
@@ -279,8 +345,36 @@ export default function BadHabitDetailScreen() {
         {/* Calendar */}
         <Card style={styles.calendarCard}>
           <View style={styles.calendarHeader}>
-            <Ionicons name="calendar-outline" size={18} color={Colors.SteelBlue} />
-            <Text style={styles.calendarTitle}>{cal.monthName}</Text>
+            <Pressable
+              onPress={goToPreviousMonth}
+              style={({ pressed }) => [
+                styles.calendarNavBtn,
+                { transform: [{ scale: pressed ? 0.94 : 1 }] },
+              ]}
+            >
+              <Ionicons name="chevron-back" size={18} color={Colors.TextPrimary} />
+            </Pressable>
+
+            <View style={styles.calendarHeaderLeft}>
+              <Ionicons name="calendar-outline" size={18} color={Colors.SteelBlue} />
+              <Text style={styles.calendarTitle}>{cal.monthName}</Text>
+            </View>
+
+            <Pressable
+              onPress={goToNextMonth}
+              disabled={isAtCurrentMonth}
+              style={({ pressed }) => [
+                styles.calendarNavBtn,
+                isAtCurrentMonth && styles.calendarNavBtnDisabled,
+                { transform: [{ scale: pressed && !isAtCurrentMonth ? 0.94 : 1 }] },
+              ]}
+            >
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={isAtCurrentMonth ? Colors.DustyTaupe : Colors.TextPrimary}
+              />
+            </Pressable>
           </View>
           <View style={styles.calendarDays}>
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
@@ -291,30 +385,45 @@ export default function BadHabitDetailScreen() {
           </View>
           <View style={styles.calendarGrid}>
             {cal.cells.map((cell, i) => {
-              if (!cell.day) return <View key={`empty-${i}`} style={styles.calendarCell} />;
-              const bgMap = {
-                clean: Colors.Success,
-                relapse: Colors.Danger,
-                future: Colors.SurfaceContainerLow,
-                pre: Colors.SurfaceContainerHigh,
-              };
+              if (!cell.day) {
+                return (
+                  <View key={`empty-${i}`} style={styles.calendarCellWrap}>
+                    <View style={styles.calendarCellEmpty} />
+                  </View>
+                );
+              }
+
+              const isToday =
+                cell.day === cal.todayDay &&
+                cell.status !== 'future' &&
+                cell.status !== 'pre';
+
               return (
-                <View
-                  key={`cell-${cell.day}`}
-                  style={[
-                    styles.calendarCell,
-                    { backgroundColor: bgMap[cell.status] },
-                    cell.status === 'clean' && styles.calendarCellClean,
-                    cell.status === 'relapse' && styles.calendarCellRelapse,
-                  ]}
-                >
-                  <Text style={[
-                    styles.calendarCellText,
-                    cell.status === 'future' && styles.calendarCellTextFuture,
-                    cell.status === 'pre' && styles.calendarCellTextPre,
-                  ]}>
-                    {cell.day}
-                  </Text>
+                <View key={`cell-${cell.day}`} style={styles.calendarCellWrap}>
+                  <View
+                    style={[
+                      styles.calendarCell,
+                      cell.status === 'clean' && styles.calendarCellClean,
+                      cell.status === 'relapse' && styles.calendarCellRelapse,
+                      cell.status === 'future' && styles.calendarCellFuture,
+                      cell.status === 'pre' && styles.calendarCellPre,
+                      isToday && styles.calendarCellToday,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.calendarCellText,
+                        cell.status === 'future' && styles.calendarCellTextFuture,
+                        cell.status === 'pre' && styles.calendarCellTextPre,
+                        isToday && styles.calendarCellTextToday,
+                      ]}
+                    >
+                      {cell.day}
+                    </Text>
+
+                    {cell.status === 'clean' && <View style={styles.calendarStatusDotClean} />}
+                    {cell.status === 'relapse' && <View style={styles.calendarStatusDotRelapse} />}
+                  </View>
                 </View>
               );
             })}
@@ -395,47 +504,108 @@ export default function BadHabitDetailScreen() {
         )}
 
         {/* Urge Log */}
-        {recentEvents.length > 0 && (
+        {urgeEvents.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Urge Log</Text>
-            {recentEvents.map((event) => {
-              const isResisted = event.type === 'RESISTED';
-              const dateLabel = new Date(event.loggedAt).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              });
-              return (
-                <Card key={event.id} style={styles.logCard}>
-                  <View style={styles.logRow}>
-                    <View style={[styles.logDot, { backgroundColor: isResisted ? Colors.Success : Colors.Danger }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.logType}>
-                        {isResisted ? 'Resisted' : 'Relapsed'}
-                      </Text>
-                      {event.note && (
-                        <Text style={styles.logNote} numberOfLines={1}>{event.note}</Text>
-                      )}
+            <View style={styles.logHeaderRow}>
+              <Text style={styles.sectionTitle}>Urge Log</Text>
+              <View style={styles.logCountBadge}>
+                <Text style={styles.logCountText}>{filteredEvents.length}</Text>
+              </View>
+            </View>
+
+            <View style={styles.logFiltersRow}>
+              {([
+                { key: 'ALL', label: 'All' },
+                { key: 'RESISTED', label: 'Resisted' },
+                { key: 'RELAPSE', label: 'Relapsed' },
+              ] as { key: LogFilter; label: string }[]).map((item) => {
+                const isActive = logFilter === item.key;
+                return (
+                  <Pressable
+                    key={item.key}
+                    onPress={() => {
+                      setLogFilter(item.key);
+                      setShowAllLogs(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.logFilterChip,
+                      isActive && styles.logFilterChipActive,
+                      { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                    ]}
+                  >
+                    <Text style={[styles.logFilterText, isActive && styles.logFilterTextActive]}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {filteredEvents.length === 0 ? (
+              <View style={styles.filteredEmptyLog}>
+                <Text style={styles.filteredEmptyLogText}>No logs for this filter.</Text>
+              </View>
+            ) : (
+              visibleEvents.map((event) => {
+                const isResisted = event.type === 'RESISTED';
+                const dateLabel = formatEventDateLabel(event.loggedAt);
+                const tags = event.triggerTag ? event.triggerTag.split(', ') : [];
+                const visibleTags = tags.slice(0, 2);
+                const hiddenTagCount = Math.max(0, tags.length - visibleTags.length);
+
+                return (
+                  <Card key={event.id} style={styles.logCard}>
+                    <View style={styles.logRow}>
+                      <View style={[styles.logDot, { backgroundColor: isResisted ? Colors.Success : Colors.Danger }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.logType}>
+                          {isResisted ? 'Resisted' : 'Relapsed'}
+                        </Text>
+                        {event.note && (
+                          <Text style={styles.logNote} numberOfLines={1}>{event.note}</Text>
+                        )}
+                      </View>
+                      <Text style={styles.logDate}>{dateLabel}</Text>
                     </View>
-                    <Text style={styles.logDate}>{dateLabel}</Text>
-                  </View>
-                  {event.triggerTag && (
-                    <View style={styles.logTags}>
-                      {event.triggerTag.split(', ').map((tag) => (
-                        <View key={tag} style={styles.logTagChip}>
-                          <Text style={styles.logTagText}>{tag}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </Card>
-              );
-            })}
+                    {visibleTags.length > 0 && (
+                      <View style={styles.logTags}>
+                        {visibleTags.map((tag, idx) => (
+                          <View key={`${event.id}-${tag}-${idx}`} style={styles.logTagChip}>
+                            <Text style={styles.logTagText}>{tag}</Text>
+                          </View>
+                        ))}
+                        {hiddenTagCount > 0 && (
+                          <Text style={styles.logMoreCount}>+{hiddenTagCount}</Text>
+                        )}
+                      </View>
+                    )}
+                  </Card>
+                );
+              })
+            )}
+
+            {hasMoreLogs && (
+              <Pressable
+                onPress={() => setShowAllLogs((prev) => !prev)}
+                style={({ pressed }) => [
+                  styles.logToggleBtn,
+                  { opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={styles.logToggleText}>
+                  {showAllLogs ? 'Show less' : `Show all ${filteredEvents.length} logs`}
+                </Text>
+                <Ionicons
+                  name={showAllLogs ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={Colors.SteelBlue}
+                />
+              </Pressable>
+            )}
           </View>
         )}
 
-        {recentEvents.length === 0 && (
+        {urgeEvents.length === 0 && (
           <View style={styles.emptyLog}>
             <Ionicons name="checkmark-circle-outline" size={40} color={Colors.DustyTaupe} />
             <Text style={styles.emptyLogTitle}>No urge events logged</Text>
@@ -614,21 +784,42 @@ const styles = StyleSheet.create({
   calendarCard: {
     padding: Spacing.md,
     marginBottom: Spacing.md,
+    borderRadius: Shapes.HeroCard,
   },
   calendarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    justifyContent: 'space-between',
     marginBottom: Spacing.md,
+  },
+  calendarHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  calendarNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.WarmSand + '60',
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+  },
+  calendarNavBtnDisabled: {
+    opacity: 0.5,
   },
   calendarTitle: {
     ...Typography.Body1,
     color: Colors.TextPrimary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   calendarDays: {
     flexDirection: 'row',
-    marginBottom: Spacing.xs,
+    marginBottom: Spacing.xs + 2,
   },
   calendarDayLabel: {
     flex: 1,
@@ -637,28 +828,53 @@ const styles = StyleSheet.create({
   calendarDayLabelText: {
     ...Typography.Caption,
     color: Colors.TextSecondary,
+    fontWeight: '600',
   },
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
-  calendarCell: {
+  calendarCellWrap: {
     width: `${100 / 7}%` as any,
+    padding: 2,
+  },
+  calendarCell: {
     aspectRatio: 1,
-    borderRadius: 6,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.SurfaceContainerLow,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    backgroundColor: Colors.Surface,
+    overflow: 'hidden',
+  },
+  calendarCellEmpty: {
+    aspectRatio: 1,
   },
   calendarCellClean: {
-    backgroundColor: Colors.Success + '30',
+    backgroundColor: Colors.Success + '16',
+    borderColor: Colors.Success + '40',
   },
   calendarCellRelapse: {
-    backgroundColor: Colors.Danger + '30',
+    backgroundColor: Colors.Danger + '16',
+    borderColor: Colors.Danger + '40',
+  },
+  calendarCellFuture: {
+    backgroundColor: Colors.SurfaceContainerLow,
+    borderColor: Colors.BorderSubtle,
+  },
+  calendarCellPre: {
+    backgroundColor: Colors.WarmSand + '70',
+    borderColor: Colors.BorderSubtle,
+  },
+  calendarCellToday: {
+    borderColor: Colors.SteelBlue,
+    borderWidth: 2,
   },
   calendarCellText: {
     ...Typography.Caption,
     color: Colors.TextPrimary,
+    fontWeight: '600',
   },
   calendarCellTextFuture: {
     color: Colors.DustyTaupe,
@@ -666,16 +882,41 @@ const styles = StyleSheet.create({
   calendarCellTextPre: {
     color: Colors.DustyTaupe,
   },
+  calendarCellTextToday: {
+    color: Colors.TextPrimary,
+    fontWeight: '600',
+  },
+  calendarStatusDotClean: {
+    position: 'absolute',
+    bottom: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.Success,
+  },
+  calendarStatusDotRelapse: {
+    position: 'absolute',
+    bottom: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.Danger,
+  },
   calendarLegend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: Spacing.md,
+    gap: Spacing.sm,
     marginTop: Spacing.md,
+    flexWrap: 'wrap',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
+    backgroundColor: Colors.WarmSand + '55',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Shapes.Chip,
   },
   legendDot: {
     width: 10,
@@ -719,6 +960,64 @@ const styles = StyleSheet.create({
     color: Colors.TextPrimary,
     fontSize: 18,
     lineHeight: 24,
+  },
+  logHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  logCountBadge: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.SoftSky + '45',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.sm,
+  },
+  logCountText: {
+    ...Typography.Caption,
+    color: Colors.SteelBlue,
+    fontWeight: '700',
+  },
+  logFiltersRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  logFilterChip: {
+    borderRadius: Shapes.Chip,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    backgroundColor: Colors.Surface,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+  },
+  logFilterChipActive: {
+    borderColor: Colors.SteelBlue + '55',
+    backgroundColor: Colors.SoftSky + '33',
+  },
+  logFilterText: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    fontWeight: '500',
+  },
+  logFilterTextActive: {
+    color: Colors.SteelBlue,
+    fontWeight: '700',
+  },
+  filteredEmptyLog: {
+    borderRadius: Shapes.Card,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    backgroundColor: Colors.Surface,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+  },
+  filteredEmptyLogText: {
+    ...Typography.Body2,
+    color: Colors.TextSecondary,
   },
   triggerPrompt: {
     flexDirection: 'row',
@@ -765,7 +1064,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   logCard: {
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
     marginBottom: Spacing.sm,
   },
   logRow: {
@@ -810,6 +1110,25 @@ const styles = StyleSheet.create({
   logTagText: {
     ...Typography.Micro,
     color: Colors.TextPrimary,
+  },
+  logMoreCount: {
+    ...Typography.Micro,
+    color: Colors.TextSecondary,
+    alignSelf: 'center',
+  },
+  logToggleBtn: {
+    marginTop: Spacing.xs,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  logToggleText: {
+    ...Typography.Caption,
+    color: Colors.SteelBlue,
+    fontWeight: '600',
   },
   emptyLog: {
     alignItems: 'center',

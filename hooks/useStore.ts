@@ -1,5 +1,11 @@
 // React hooks for accessing stores reactively
 import { useState, useEffect, useCallback } from 'react';
+import {
+  getDisplayName,
+  isOnboardingCompleted,
+  setOnboardingCompleted,
+  updateDisplayName,
+} from '@/stores/userStore';
 
 /**
  * Generic hook that loads data once and provides a refresh function.
@@ -38,11 +44,11 @@ export function useDisplayName(): [string, (name: string) => Promise<void>] {
   const [name, setName] = useState('User');
 
   useEffect(() => {
-    import('../stores/userStore').then((m) => m.getDisplayName().then(setName));
+    getDisplayName().then(setName);
   }, []);
 
   const updateName = async (newName: string) => {
-    await import('../stores/userStore').then((m) => m.updateDisplayName(newName));
+    await updateDisplayName(newName);
     setName(newName);
   };
 
@@ -56,11 +62,11 @@ export function useOnboardingCompleted(): [boolean, (completed: boolean) => Prom
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    import('../stores/userStore').then((m) => m.isOnboardingCompleted().then(setDone));
+    isOnboardingCompleted().then(setDone);
   }, []);
 
   const setCompleted = async (completed: boolean) => {
-    await import('../stores/userStore').then((m) => m.setOnboardingCompleted(completed));
+    await setOnboardingCompleted(completed);
     setDone(completed);
   };
 

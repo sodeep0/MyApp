@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { safeBack } from '@/navigation/safeBack';
 import { RingProgress } from '@/components/RingProgress';
 import {
   getHabitById,
@@ -49,25 +50,49 @@ function formatDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function generateHeatmapData(completions: HabitCompletion[]): { completed: boolean; missed: boolean }[][] {
-  const dateSet = new Set(completions.map((c) => c.completedDate));
-  const weeks: { completed: boolean; missed: boolean }[][] = [];
-  const today = new Date();
+function getMonthlyCalendar(
+  completions: HabitCompletion[],
+  startDate: string,
+  displayMonth: Date,
+) {
+  const now = new Date();
+  const year = displayMonth.getFullYear();
+  const month = displayMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startPad = firstDay.getDay();
+  const daysInMonth = lastDay.getDate();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const isCurrentMonth = now.getFullYear() === year && now.getMonth() === month;
 
-  for (let week = 12; week >= 0; week--) {
-    const days: { completed: boolean; missed: boolean }[] = [];
-    for (let day = 6; day >= 0; day--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - (week * 7 + day));
-      const dateStr = formatDateStr(d);
-      days.push({
-        completed: dateSet.has(dateStr),
-        missed: d < today && !dateSet.has(dateStr),
-      });
-    }
-    weeks.push(days);
+  const completionSet = new Set(completions.map((c) => c.completedDate));
+  const habitStart = new Date(startDate);
+  const habitStartDay = new Date(habitStart.getFullYear(), habitStart.getMonth(), habitStart.getDate());
+
+  const cells: { day: number | null; status: 'done' | 'missed' | 'future' | 'pre' }[] = [];
+  for (let i = 0; i < startPad; i++) {
+    cells.push({ day: null, status: 'pre' });
   }
-  return weeks.reverse();
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(year, month, d);
+    const dateStr = formatDateStr(dateObj);
+    if (dateObj > todayStart) {
+      cells.push({ day: d, status: 'future' });
+    } else if (dateObj < habitStartDay) {
+      cells.push({ day: d, status: 'pre' });
+    } else if (completionSet.has(dateStr)) {
+      cells.push({ day: d, status: 'done' });
+    } else {
+      cells.push({ day: d, status: 'missed' });
+    }
+  }
+
+  return {
+    cells,
+    monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    todayDay: isCurrentMonth ? now.getDate() : null,
+  };
 }
 
 function calculateBestStreak(completions: HabitCompletion[]): number {
@@ -106,6 +131,10 @@ export default function HabitDetailScreen() {
   const [weekCompletionPct, setWeekCompletionPct] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
   const loadData = useCallback(async () => {
     if (!id || typeof id !== 'string') return;
@@ -188,7 +217,21 @@ export default function HabitDetailScreen() {
     );
   }
 
-  const heatmapData = generateHeatmapData(completions);
+  const cal = getMonthlyCalendar(completions, habit.createdAt, calendarMonth);
+  const now = new Date();
+  const currentMonthIndex = now.getFullYear() * 12 + now.getMonth();
+  const viewedMonthIndex = calendarMonth.getFullYear() * 12 + calendarMonth.getMonth();
+  const isAtCurrentMonth = viewedMonthIndex >= currentMonthIndex;
+
+  const goToPreviousMonth = () => {
+    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const goToNextMonth = () => {
+    if (isAtCurrentMonth) return;
+    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
   const categoryLabel = CATEGORY_LABELS[habit.category] || habit.category;
   const frequencyLabel = FREQUENCY_LABELS[habit.frequency] || habit.frequency;
   const iconInfo = CATEGORY_ICONS[habit.category] || CATEGORY_ICONS.CUSTOM;
@@ -196,7 +239,7 @@ export default function HabitDetailScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable onPress={() => safeBack(router, '/(tabs)/habits')} style={styles.iconBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
         </Pressable>
         <Pressable onPress={() => router.push(`/(tabs)/habits/add-edit?id=${habit.id}` as any)} style={styles.iconBtn}>
@@ -284,50 +327,103 @@ export default function HabitDetailScreen() {
           <View style={styles.tabContent}>
             <View style={styles.calendarCard}>
               <View style={styles.calendarHeader}>
-                <Text style={styles.calendarTitle}>Last 90 Days</Text>
-                <View style={styles.legend}>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: Colors.SteelBlue }]} />
-                    <Text style={styles.legendText}>Done</Text>
-                  </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: Colors.DustyTaupe + '50' }]} />
-                    <Text style={styles.legendText}>Missed</Text>
-                  </View>
+                <Pressable
+                  onPress={goToPreviousMonth}
+                  style={({ pressed }) => [
+                    styles.calendarNavBtn,
+                    { transform: [{ scale: pressed ? 0.94 : 1 }] },
+                  ]}
+                >
+                  <Ionicons name="chevron-back" size={18} color={Colors.TextPrimary} />
+                </Pressable>
+
+                <View style={styles.calendarHeaderCenter}>
+                  <Ionicons name="calendar-outline" size={18} color={Colors.SteelBlue} />
+                  <Text style={styles.calendarTitle}>{cal.monthName}</Text>
                 </View>
+
+                <Pressable
+                  onPress={goToNextMonth}
+                  disabled={isAtCurrentMonth}
+                  style={({ pressed }) => [
+                    styles.calendarNavBtn,
+                    isAtCurrentMonth && styles.calendarNavBtnDisabled,
+                    { transform: [{ scale: pressed && !isAtCurrentMonth ? 0.94 : 1 }] },
+                  ]}
+                >
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={isAtCurrentMonth ? Colors.DustyTaupe : Colors.TextPrimary}
+                  />
+                </Pressable>
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.heatmapContainer}>
-                  <View style={styles.heatmapGrid}>
-                    {heatmapData.map((week, weekIdx) => (
-                      <View key={weekIdx} style={styles.heatmapWeek}>
-                        {week.map((day, dayIdx) => {
-                          const cellBg: string = day.missed
-                            ? Colors.DustyTaupe + '50'
-                            : day.completed
-                              ? Colors.SteelBlue
-                              : Colors.DustyTaupe + '30';
-                          return (
-                            <View
-                              key={dayIdx}
-                              style={[
-                                styles.heatmapCell,
-                                { backgroundColor: cellBg },
-                              ]}
-                            />
-                          );
-                        })}
-                      </View>
-                    ))}
+              <View style={styles.calendarDays}>
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((dayLabel, idx) => (
+                  <View key={`day-${idx}`} style={styles.calendarDayLabel}>
+                    <Text style={styles.calendarDayLabelText}>{dayLabel}</Text>
                   </View>
-                </View>
-              </ScrollView>
+                ))}
+              </View>
 
-              <View style={styles.monthLabels}>
-                <Text style={styles.monthLabel}>Oct</Text>
-                <Text style={styles.monthLabel}>Nov</Text>
-                <Text style={styles.monthLabel}>Dec</Text>
+              <View style={styles.calendarGrid}>
+                {cal.cells.map((cell, idx) => {
+                  if (!cell.day) {
+                    return (
+                      <View key={`empty-${idx}`} style={styles.calendarCellWrap}>
+                        <View style={styles.calendarCellEmpty} />
+                      </View>
+                    );
+                  }
+
+                  const isToday =
+                    cell.day === cal.todayDay &&
+                    cell.status !== 'future' &&
+                    cell.status !== 'pre';
+
+                  return (
+                    <View key={`cell-${cell.day}`} style={styles.calendarCellWrap}>
+                      <View
+                        style={[
+                          styles.calendarCell,
+                          cell.status === 'done' && styles.calendarCellDone,
+                          cell.status === 'missed' && styles.calendarCellMissed,
+                          cell.status === 'future' && styles.calendarCellFuture,
+                          cell.status === 'pre' && styles.calendarCellPre,
+                          isToday && styles.calendarCellToday,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.calendarCellText,
+                            (cell.status === 'future' || cell.status === 'pre') && styles.calendarCellTextMuted,
+                            isToday && styles.calendarCellTextToday,
+                          ]}
+                        >
+                          {cell.day}
+                        </Text>
+                        {cell.status === 'done' && <View style={styles.calendarStatusDotDone} />}
+                        {cell.status === 'missed' && <View style={styles.calendarStatusDotMissed} />}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View style={styles.legend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: Colors.Success }]} />
+                  <Text style={styles.legendText}>Done</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: Colors.Warning }]} />
+                  <Text style={styles.legendText}>Missed</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: Colors.SurfaceContainerLow }]} />
+                  <Text style={styles.legendText}>Upcoming</Text>
+                </View>
               </View>
             </View>
 
@@ -401,36 +497,40 @@ export default function HabitDetailScreen() {
           </View>
         )}
 
-        <View style={{ height: 120 }} />
+        <View style={styles.actionSection}>
+          <Text style={styles.actionTitle}>Quick Actions</Text>
+          {!completedToday ? (
+            <View style={styles.ctaContainer}>
+              <LinearGradient
+                colors={[Colors.SteelBlue, Colors.TextPrimary]}
+                start={[0, 0]}
+                end={[1, 0]}
+                style={styles.ctaButton}
+              >
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.ctaPressable,
+                    { transform: [{ scale: pressed ? 0.98 : 1 }] },
+                  ]}
+                  onPress={handleMarkComplete}
+                >
+                  <Ionicons name="checkmark-circle" size={20} color={Colors.Surface} style={styles.ctaIcon} />
+                  <Text style={styles.ctaText}>Mark as Complete Today</Text>
+                </Pressable>
+              </LinearGradient>
+            </View>
+          ) : (
+            <View style={styles.ctaContainer}>
+              <View style={styles.completedBanner}>
+                <Ionicons name="checkmark-circle" size={20} color={Colors.Success} />
+                <Text style={styles.completedText}>Completed today</Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={{ height: insets.bottom + 100 }} />
       </ScrollView>
-
-      {!completedToday && (
-        <View style={[styles.ctaContainer, { bottom: 16 + insets.bottom }]}>
-          <LinearGradient
-colors={[Colors.SteelBlue, Colors.TextPrimary]}
-            start={[0, 0]}
-            end={[1, 0]}
-            style={styles.ctaButton}
-          >
-            <Pressable
-              style={styles.ctaPressable}
-              onPress={handleMarkComplete}
-            >
-              <Ionicons name="checkmark-circle" size={20} color={Colors.Surface} style={styles.ctaIcon} />
-              <Text style={styles.ctaText}>Mark as Complete Today</Text>
-            </Pressable>
-          </LinearGradient>
-        </View>
-      )}
-
-      {completedToday && (
-        <View style={[styles.ctaContainer, { bottom: 16 + insets.bottom }]}>
-          <View style={styles.completedBanner}>
-            <Ionicons name="checkmark-circle" size={20} color={Colors.Success} />
-            <Text style={styles.completedText}>Completed today</Text>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
@@ -585,62 +685,152 @@ const styles = StyleSheet.create({
   },
   calendarHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  calendarHeaderCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  calendarNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.WarmSand + '60',
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+  },
+  calendarNavBtnDisabled: {
+    opacity: 0.5,
   },
   calendarTitle: {
     ...Typography.Body1,
     fontWeight: '700',
     color: Colors.TextPrimary,
   },
+  calendarDays: {
+    flexDirection: 'row',
+    marginBottom: Spacing.xs + 2,
+  },
+  calendarDayLabel: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  calendarDayLabelText: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    fontWeight: '600',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarCellWrap: {
+    width: `${100 / 7}%` as any,
+    padding: 2,
+  },
+  calendarCell: {
+    aspectRatio: 1,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    backgroundColor: Colors.Surface,
+    overflow: 'hidden',
+  },
+  calendarCellEmpty: {
+    aspectRatio: 1,
+  },
+  calendarCellDone: {
+    backgroundColor: Colors.Success + '16',
+    borderColor: Colors.Success + '40',
+  },
+  calendarCellMissed: {
+    backgroundColor: Colors.Warning + '14',
+    borderColor: Colors.Warning + '38',
+  },
+  calendarCellFuture: {
+    backgroundColor: Colors.SurfaceContainerLow,
+    borderColor: Colors.BorderSubtle,
+  },
+  calendarCellPre: {
+    backgroundColor: Colors.WarmSand + '70',
+    borderColor: Colors.BorderSubtle,
+  },
+  calendarCellToday: {
+    borderColor: Colors.SteelBlue,
+    borderWidth: 2,
+  },
+  calendarCellText: {
+    ...Typography.Caption,
+    color: Colors.TextPrimary,
+    fontWeight: '600',
+  },
+  calendarCellTextMuted: {
+    color: Colors.DustyTaupe,
+  },
+  calendarCellTextToday: {
+    color: Colors.TextPrimary,
+    fontWeight: '700',
+  },
+  calendarStatusDotDone: {
+    position: 'absolute',
+    bottom: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.Success,
+  },
+  calendarStatusDotMissed: {
+    position: 'absolute',
+    bottom: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.Warning,
+  },
   legend: {
     flexDirection: 'row',
-    gap: Spacing.md,
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    flexWrap: 'wrap',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Spacing.xs,
+    backgroundColor: Colors.WarmSand + '55',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Shapes.Chip,
   },
   legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   legendText: {
     ...Typography.Micro,
     color: Colors.TextSecondary,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
-  heatmapContainer: {
-    flex: 1,
+  actionSection: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
   },
-  heatmapGrid: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  heatmapWeek: {
-    gap: 4,
-  },
-  heatmapCell: {
-    width: 16,
-    height: 16,
-    borderRadius: 2,
-  },
-  monthLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: Spacing.md,
-  },
-  monthLabel: {
-    ...Typography.Micro,
-    color: Colors.TextSecondary,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+  actionTitle: {
+    ...Typography.Headline2,
+    color: Colors.TextPrimary,
+    fontSize: 18,
+    lineHeight: 24,
+    marginBottom: Spacing.sm,
   },
   insightCard: {
     backgroundColor: Colors.WarmSand + '60',
@@ -721,9 +911,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   ctaContainer: {
-    position: 'absolute',
-    left: Spacing.screenH,
-    right: Spacing.screenH,
+    width: '100%',
   },
   ctaButton: {
     borderRadius: Shapes.Button,

@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
+import { safeBack } from '@/navigation/safeBack';
 import { addGoal, updateGoal, getGoalById } from '@/stores/goalStore';
 import {
   GoalCategory,
@@ -53,6 +54,7 @@ export default function AddEditGoalScreen() {
   const isEditingMode = !!id;
   const isEditing = isEditingMode;
   const [isLoading, setIsLoading] = useState(isEditingMode);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -105,6 +107,8 @@ export default function AddEditGoalScreen() {
   };
 
   const handleSave = async () => {
+    if (isLoading || isSaving) return;
+
     if (!title.trim()) {
       Alert.alert('Missing Title', 'Please enter a goal title.');
       return;
@@ -116,34 +120,42 @@ export default function AddEditGoalScreen() {
 
     const targetVal = goalType === GoalType.QUANTITATIVE ? parseFloat(targetValue) : null;
 
-    if (isEditing) {
-      await updateGoal(id as string, {
-        title: title.trim(),
-        description: description.trim() || null,
-        category,
-        goalType,
-        targetValue: targetVal,
-        unit: unit.trim() || null,
-        milestones,
-        targetDate: targetDate || null,
-      });
-    } else {
-      await addGoal({
-        userId: 'local',
-        title: title.trim(),
-        description: description.trim() || null,
-        category,
-        goalType,
-        targetValue: targetVal,
-        currentValue: 0,
-        unit: unit.trim() || null,
-        milestones,
-        targetDate: targetDate || null,
-        linkedHabitIds: [],
-        status: GoalStatus.ACTIVE,
-      });
+    setIsSaving(true);
+    try {
+      if (isEditing) {
+        await updateGoal(id as string, {
+          title: title.trim(),
+          description: description.trim() || null,
+          category,
+          goalType,
+          targetValue: targetVal,
+          unit: unit.trim() || null,
+          milestones,
+          targetDate: targetDate || null,
+        });
+      } else {
+        await addGoal({
+          userId: 'local',
+          title: title.trim(),
+          description: description.trim() || null,
+          category,
+          goalType,
+          targetValue: targetVal,
+          currentValue: 0,
+          unit: unit.trim() || null,
+          milestones,
+          targetDate: targetDate || null,
+          linkedHabitIds: [],
+          status: GoalStatus.ACTIVE,
+        });
+      }
+      safeBack(router, '/(tabs)/goals');
+    } catch (error) {
+      console.error('Failed to save goal:', error);
+      Alert.alert('Error', 'Failed to save goal. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-    router.back();
   };
 
   const canSave = title.trim() && (goalType !== 'QUANTITATIVE' || targetValue.trim());
@@ -152,7 +164,7 @@ export default function AddEditGoalScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack(router, '/(tabs)/goals')}
           style={({ pressed }) => [styles.headerBtn, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
@@ -167,7 +179,7 @@ export default function AddEditGoalScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -387,7 +399,7 @@ export default function AddEditGoalScreen() {
         <View style={{ height: Spacing.xl }} />
       </ScrollView>
 
-      <View style={styles.ctaContainer}>
+      <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md + 70 }]}>
         <Pressable
           onPress={handleSave}
           style={({ pressed }) => [
@@ -395,7 +407,7 @@ export default function AddEditGoalScreen() {
             !canSave && styles.ctaButtonDisabled,
             { transform: [{ scale: pressed ? 0.98 : 1 }] },
           ]}
-          disabled={!canSave}
+          disabled={!canSave || isSaving || isLoading}
         >
           <LinearGradient
             colors={[Colors.SteelBlue, Colors.TextPrimary]}

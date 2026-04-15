@@ -13,18 +13,38 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { isOnboardingCompleted } from '../stores/userStore';
+import { isFirebaseConfigured } from '@/services/firebase/app';
+import { ensureAnonymousAuth } from '@/services/firebase/auth';
+import { flushUserQueue } from '@/repositories/firebase/userRepository.firebase';
+import { flushHabitQueue } from '@/repositories/firebase/habitRepository.firebase';
+import { flushGoalQueue } from '@/repositories/firebase/goalRepository.firebase';
+import { flushActivityQueue } from '@/repositories/firebase/activityRepository.firebase';
+import { subscribeSyncTriggers } from '@/services/sync/networkState';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
 
+  const flushPendingSync = async () => {
+    if (!isFirebaseConfigured()) return;
+    await Promise.allSettled([flushUserQueue(), flushHabitQueue(), flushGoalQueue(), flushActivityQueue()]);
+  };
+
   useEffect(() => {
     const checkOnboarding = async () => {
+      await ensureAnonymousAuth();
+      await flushPendingSync();
       const done = await isOnboardingCompleted();
       setInitialRoute(done ? '(tabs)' : 'onboarding');
     };
     checkOnboarding();
+  }, []);
+
+  useEffect(() => {
+    return subscribeSyncTriggers(() => {
+      flushPendingSync();
+    });
   }, []);
 
   useEffect(() => {

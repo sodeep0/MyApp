@@ -12,6 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
+import { safeBack } from '@/navigation/safeBack';
 import {
   addJournalEntry,
   updateJournalEntry,
@@ -138,6 +139,8 @@ export default function JournalEntryScreen() {
   };
 
   const handleSave = async () => {
+    if (saving || loading) return;
+
     if (moodScore === 0) {
       Alert.alert('Select Mood', 'Please tap a mood before saving.');
       return;
@@ -169,8 +172,9 @@ export default function JournalEntryScreen() {
         });
       }
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-      router.back();
-    } catch {
+      safeBack(router, '/(tabs)/track/journal');
+    } catch (error) {
+      console.error('Failed to save journal entry:', error);
       Alert.alert('Error', 'Could not save entry. Please try again.');
     } finally {
       setSaving(false);
@@ -185,7 +189,7 @@ export default function JournalEntryScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.headerBtn}>
+          <Pressable onPress={() => safeBack(router, '/(tabs)/track/journal')} style={styles.headerBtn}>
             <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
           </Pressable>
           <Text style={styles.headerTitle}>Loading...</Text>
@@ -199,7 +203,7 @@ export default function JournalEntryScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack(router, '/(tabs)/track/journal')}
           style={({ pressed }) => [styles.headerBtn, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
@@ -351,11 +355,11 @@ export default function JournalEntryScreen() {
       <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md + 70 }]}>
         <Pressable
           onPress={handleSave}
-          disabled={!canSave}
+          disabled={!canSave || saving || loading}
           style={({ pressed }) => [
             styles.ctaButton,
-            !canSave && styles.ctaButtonDisabled,
-            { transform: [{ scale: pressed && canSave ? 0.98 : 1 }] },
+            (!canSave || saving || loading) && styles.ctaButtonDisabled,
+            { transform: [{ scale: pressed && canSave && !saving && !loading ? 0.98 : 1 }] },
           ]}
         >
           <Text style={[styles.ctaText, !canSave && styles.ctaTextDisabled]}>

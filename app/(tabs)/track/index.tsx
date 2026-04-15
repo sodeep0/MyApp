@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -162,9 +162,6 @@ export default function TrackHubScreen() {
           <Text style={styles.title}>Track</Text>
           <Text style={styles.subtitle}>{getDateString()}</Text>
         </View>
-        <Pressable style={styles.headerBtn} hitSlop={8}>
-          <Ionicons name="help-circle-outline" size={28} color={Colors.TextPrimary} />
-        </Pressable>
       </View>
 
       <ScrollView
@@ -173,21 +170,21 @@ export default function TrackHubScreen() {
       >
         <View style={styles.modulesList}>
           <ModuleCard
-            icon="shield-checkmark"
+            icon="shield-checkmark-outline"
             title="Bad Habits"
             description="Track addictions and monitor clean streaks"
             color={Colors.Success}
             onPress={() => router.push('/track/bad-habits' as any)}
           />
           <ModuleCard
-            icon="book"
+            icon="book-outline"
             title="Journal"
             description="Daily reflections with mood tracking"
             color={Colors.SteelBlue}
             onPress={() => router.push('/track/journal' as any)}
           />
           <ModuleCard
-            icon="bar-chart"
+            icon="bar-chart-outline"
             title="Activity Log"
             description="Log exercise, work, learning, and more"
             color={Colors.Warning}
@@ -274,7 +271,6 @@ const styles = StyleSheet.create({
   },
   modulesList: {
     paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
     gap: Spacing.sm,
   },
   moduleCard: {
@@ -289,8 +285,8 @@ const styles = StyleSheet.create({
     ...Shadows.Card,
   },
   moduleIcon: {
-    width: 52,
-    height: 52,
+    width: 36,
+    height: 36,
     borderRadius: Shapes.IconBg,
     justifyContent: 'center',
     alignItems: 'center',

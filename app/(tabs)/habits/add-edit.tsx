@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
 import { Button } from '@/components/Button';
+import { safeBack } from '@/navigation/safeBack';
 import { addHabit, getHabitById, updateHabit } from '@/stores/habitStore';
 import { HabitCategory, HabitFrequency } from '@/types/models';
 
@@ -96,6 +97,7 @@ export default function AddEditHabitScreen() {
   const [reminderTime, setReminderTime] = useState('08:00');
   const [timesPerWeek, setTimesPerWeek] = useState('3');
   const [isLoading, setIsLoading] = useState(isEditing);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!isEditing || !id) return;
@@ -133,7 +135,9 @@ export default function AddEditHabitScreen() {
   }, [id, isEditing]);
 
   const handleSave = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || isSaving || isLoading) return;
+
+    setIsSaving(true);
 
     const selectedIcon = ICON_OPTIONS[selectedIconIndex];
 
@@ -175,17 +179,20 @@ export default function AddEditHabitScreen() {
           reminderTime: finalReminderTime,
         });
       }
-      router.back();
+
+      safeBack(router, '/(tabs)/habits');
     } catch (error) {
       console.error('Failed to save habit:', error);
       Alert.alert('Error', 'Failed to save habit. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top || Spacing.lg }]}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable onPress={() => safeBack(router, '/(tabs)/habits')} style={styles.backBtn}>
           <Ionicons name="close" size={24} color={Colors.TextPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>
@@ -380,12 +387,12 @@ export default function AddEditHabitScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <View style={[styles.ctaContainer, { paddingBottom: insets.bottom || Spacing.md }]}>
+      <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md + 70 }]}>
         <Button
           label={isEditing ? 'Save Changes' : 'Create Habit'}
           onPress={handleSave}
           fullWidth
-          disabled={isLoading || !name.trim()}
+          disabled={isLoading || isSaving || !name.trim()}
         />
       </View>
     </View>

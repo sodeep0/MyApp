@@ -12,6 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { safeBack } from '@/navigation/safeBack';
 import { addActivity, getActivityById, updateActivity } from '@/stores/activityStore';
 import { ActivityCategory, ActivityIntensity } from '@/types/models';
 
@@ -59,6 +60,7 @@ export default function LogActivityScreen() {
   const { id, name: prefillName } = useLocalSearchParams();
   const isEditing = !!id;
   const [isLoading, setIsLoading] = useState(isEditing);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [name, setName] = useState(
     typeof prefillName === 'string' ? prefillName : '',
@@ -92,6 +94,8 @@ export default function LogActivityScreen() {
   }, [id, isEditing]);
 
   const handleSave = async () => {
+    if (isLoading || isSaving) return;
+
     if (!name.trim()) {
       Alert.alert('Missing Name', 'Please enter an activity name.');
       return;
@@ -112,12 +116,20 @@ export default function LogActivityScreen() {
       notes: notes.trim() || null,
     };
 
-    if (isEditing) {
-      await updateActivity(id as string, activityData);
-    } else {
-      await addActivity(activityData);
+    setIsSaving(true);
+    try {
+      if (isEditing) {
+        await updateActivity(id as string, activityData);
+      } else {
+        await addActivity(activityData);
+      }
+      safeBack(router, '/(tabs)/track/activity');
+    } catch (error) {
+      console.error('Failed to save activity:', error);
+      Alert.alert('Error', 'Failed to save activity. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-    router.back();
   };
 
   const canSave = name.trim().length > 0 && duration.trim().length > 0 && Number(duration) > 0;
@@ -126,7 +138,7 @@ export default function LogActivityScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.headerBtn}>
+          <Pressable onPress={() => safeBack(router, '/(tabs)/track/activity')} style={styles.headerBtn}>
             <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
           </Pressable>
           <View style={styles.headerCenter}>
@@ -143,7 +155,7 @@ export default function LogActivityScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack(router, '/(tabs)/track/activity')}
           style={({ pressed }) => [styles.headerBtn, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
@@ -316,11 +328,11 @@ export default function LogActivityScreen() {
       <View style={[styles.ctaContainer, { paddingBottom: insets.bottom + Spacing.md + 70 }]}>
         <Pressable
           onPress={handleSave}
-          disabled={!canSave}
+          disabled={!canSave || isSaving || isLoading}
           style={({ pressed }) => [
             styles.ctaButton,
-            !canSave && styles.ctaButtonDisabled,
-            { transform: [{ scale: pressed && canSave ? 0.98 : 1 }] },
+            (!canSave || isSaving || isLoading) && styles.ctaButtonDisabled,
+            { transform: [{ scale: pressed && canSave && !isSaving && !isLoading ? 0.98 : 1 }] },
           ]}
         >
           <Ionicons name="checkmark-circle" size={20} color={Colors.Surface} style={{ marginRight: Spacing.sm }} />

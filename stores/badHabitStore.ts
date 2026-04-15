@@ -1,4 +1,4 @@
-// Bad habit & urge event store
+// Bad habit & urge event store (local-only by policy; never sync to Firebase)
 import type { BadHabit, UrgeEvent } from '../types/models';
 import { generateUUID } from './baseStore';
 

@@ -1,28 +1,49 @@
 # Kaarma — Implementation Progress
 
-> Last updated: 2026-04-14 | Status: Expo React Native (TypeScript) prototype phase
+> Last updated: 2026-04-15 | Status: Expo React Native (TypeScript) prototype + hybrid backend foundation
 >
 > **Stack**: Expo SDK 54 · Expo Router v6 · React Native 0.81.5 · React 19 · TypeScript 5.9
 
 ---
 
-## Recent Update (2026-04-14)
+## Recent Update (2026-04-15)
 
-- Goals tab aligned with Habits styling:
-  - `Active/Completed` filters now use Habits-style chips.
-  - Removed Goals view toggle; card view is now the only view.
-  - `+` button placement now matches Home/Habits.
-- Floating `+` button position standardized:
-  - Applied to Habits, Goals, Bad Habits, and Activity Log.
-  - Removed duplicate top-right add buttons where FAB exists.
-- Safe-area and bottom overlap fixes:
-  - Goal Detail, Bad Habit Detail, Journal Entry, and Log Activity updated for notch-safe headers.
-  - Bottom CTA areas adjusted to clear floating tab bar.
-- Bad Habit Detail UX polish:
-  - Removed fixed bottom CTAs; added in-page Quick Actions section.
-  - Fixed calendar week rendering so all 7 days show correctly.
-- Track hub enhancement:
-  - Added a `Recent` section with latest 3 merged logs from Bad Habits, Activity, and Journal.
+- Phase 1 hybrid QA/checklist alignment pass:
+  - Verified screen call paths remain stable while stores are repository-backed for cloud modules.
+  - Verified local-only constraint at code level: no Firebase imports in `stores/journalStore.ts` and `stores/badHabitStore.ts`.
+  - Updated `phase1-hybrid-checklist.md` QA and Definition-of-Done items to `in progress` where runtime validation is still pending.
+  - Added explicit QA notes section in checklist to distinguish static validation vs runtime/manual validation.
+- Hybrid backend implementation pass:
+  - Added Firebase runtime modules: `services/firebase/app.ts`, `services/firebase/auth.ts`, `services/firebase/firestore.ts`.
+  - Added sync baseline services: `services/sync/syncQueue.ts`, `services/sync/networkState.ts`.
+  - Added repository interfaces + local and firebase adapters for User/Habits/Goals/Activity.
+  - Added `repositories/factory.ts` and routed stores through repositories without UI API breaks.
+  - Added app bootstrap sync/auth wiring in `app/_layout.tsx`.
+  - Confirmed Journal and Bad Habits remain local-only and annotated with explicit policy comments.
+- Backend foundation alignment:
+  - Added `docs/data-policy.md` to lock hybrid storage policy.
+  - Added `docs/firestore-schema.md` with Phase 1 collection design and query/index guidance.
+  - Added `firestore.rules` and `firestore.indexes.json` for owner-scoped access.
+  - Added `firebase.json` and Firebase CLI scripts in `package.json`.
+  - Added `docs/firebase-cli-setup.md` and `phase1-hybrid-checklist.md` for implementation tracking.
+- Privacy policy enforcement (planning level):
+  - Journal and Bad Habits explicitly designated local-only (never synced).
+  - Cloud sync scope limited to Profile, Habits, Goals, Activity in upcoming implementation.
+- CTA overlap and layout consistency pass:
+  - Fixed bottom CTA overlap with floating tab bar on Goal Add/Edit and Habit Detail.
+  - Habit Detail CTA moved to in-page `Quick Actions` section to match Bad Habit Detail behavior.
+- Habit Detail calendar upgrade:
+  - Replaced 90-day heatmap with monthly calendar UI (prev/next month navigation, day states, today highlight, legend).
+  - Softened missed-day color from danger red to warning amber for better visual consistency.
+- Goals and Home polish:
+  - Goal Detail `Mark as Completed` action upgraded with improved CTA styling and custom themed confirmation modal (replacing native alert).
+  - Home bad-habit summary card redesigned to match goals-in-progress card style and press interaction behavior.
+- Track + Screen Time header cleanup:
+  - Removed top-right help `?` icons from Track and Screen Time headers.
+  - Removed extra spacing between Track header/date and first card; module icons standardized to match Recent section style.
+- Screen Time usability/UI polish:
+  - Added bottom safe-area spacing so `Manage App Limits` is no longer hidden behind the floating tab bar.
+  - Polished Social/Entertainment/Games cards (sentence case labels/status text, better typography/layout, overflow fix for "Entertainment").
 
 ---
 
@@ -74,7 +95,7 @@
 | Profile/Settings stack | ✅ | Avatar button on Home header → Profile |
 | Quick Add FAB | ✅ | Bottom-right dark circle `+` on Home → modal sheet |
 | Premium upgrade modal | ✅ | Presentation: modal |
-| Root-level onboarding route guard | 🔴 | Needed — check `onboardingCompleted` before showing tabs vs onboarding |
+| Root-level onboarding route guard | ✅ | Implemented in `app/_layout.tsx` via `isOnboardingCompleted()` |
 | Deep linking | 🔴 | Not configured |
 
 ---
@@ -90,7 +111,6 @@
 | Reveal | `/onboarding/reveal` | ✅ | "You're All Set!" confirmation, "Open Dashboard" CTA |
 
 **Suggestions:**
-- Persist `onboardingCompleted` flag and add root-level route guard
 - Add skip button on each screen (currently only on Welcome)
 
 ---
@@ -111,7 +131,6 @@
 | Quick Add FAB | ✅ | Bottom-right dark circle `+` on Home → modal sheet (habit check-in, journal, activity, goal) |
 
 **Suggestions:**
-- Replace mock habit data with AsyncStorage persistence
 - Add pull-to-refresh for dashboard stats
 - Animate completion ring on mount
 - Add "streak at risk" badge when time > 22:00
@@ -141,11 +160,11 @@
 | Habit header | ✅ | Name + subtitle |
 | Stats grid | ✅ | Best Streak, Total Done, This Month |
 | Tabs: History / Calendar / Stats | ✅ | Tab navigation with indicator |
-| Calendar heatmap | ✅ | 13 weeks × 7 days, SteelBlue/DustyTaupe |
+| Calendar view | ✅ | Monthly grid with month navigation, day states (done/missed/future/pre), and today highlight |
 | Insight card | ✅ | Behavioral pattern display |
 | History tab | ✅ | Recent done/missed entries |
 | Stats tab | ✅ | Category, frequency, rate, streaks, created date |
-| Sticky CTA | ✅ | "Mark as Complete Today" gradient button |
+| Quick Actions CTA | ✅ | In-content "Mark as Complete Today" action + completed state banner |
 
 ### 4.3 Add/Edit Habit Screen (`/habits/add-edit`)
 
@@ -162,11 +181,11 @@
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Data persistence | ❌ | All mock — in-memory arrays |
-| HabitCompletion records | ❌ | No completion history stored |
-| Frequency logic (weekdays/x-per-week/every-n-days) | ❌ | UI exists, no logic |
+| Data persistence | ✅ | AsyncStorage-backed stores implemented for habits + completions |
+| HabitCompletion records | ✅ | Completion history stored in `kaarma_habit_completions` |
+| Frequency logic (weekdays/x-per-week/every-n-days) | 🟡 | Basic logic implemented; needs P0 hardening for all frequencies and edge cases |
 | Reminder notifications | ❌ | Not wired — need `expo-notifications` |
-| `calculateStreak()` | 🔴 | Not implemented |
+| `calculateStreak()` | 🟡 | Implemented with partial frequency handling; requires correctness hardening |
 | Streak at risk logic (>22:00) | 🔴 | Not implemented |
 
 ---
@@ -218,8 +237,8 @@
 | Feature | Status | Notes |
 |---------|--------|-------|
 | List screen | ✅ | Weekly summary, quick log chips, recent activity list |
-| Weekly summary card | 🟡 | UI present — needs actual calculation from data |
-| Quick log chips | 🟡 | UI present — not wired to last-used entries |
+| Weekly summary card | ✅ | Wired to `getWeeklySummary()` from activity store |
+| Quick log chips | ✅ | Wired to `getFrequentActivityNames()` and prefill flow |
 | Recent activity list | ✅ | Name, category, duration, date/time, intensity badge |
 | Log Activity screen | ✅ | Name, category, duration, date/time, intensity, notes form |
 | 48-hour edit window | 🔴 | Not built |
@@ -248,7 +267,7 @@
 | Quick log chips | ✅ | +0.5, +1, +1.5, +2 for quantitative goals |
 | Linked habits | ✅ | List with icons |
 | Milestone checklist | ✅ | Toggle completion per milestone |
-| Mark as Complete CTA | ✅ | Confirmation alert |
+| Mark as Complete CTA | ✅ | Polished CTA + custom themed confirmation modal |
 
 ### 8.3 Add/Edit Goal (`/goals/add-edit`)
 
@@ -279,12 +298,13 @@
 | Dashboard screen | ✅ | Period toggle, total time hero, bar chart, top apps, focus session |
 | Period toggle | ✅ | Today / Week |
 | Total time hero | ✅ | Trend indicator (+/- vs yesterday/last week) |
+| Category cards (Social/Entertainment/Games) | ✅ | Polished typography/layout, sentence case labels, overflow-safe text |
 | Hourly bar chart | ✅ | View-based bars, peak label |
 | Top apps list | ✅ | Icon, name, usage, progress bar, limit status |
 | "LIMIT REACHED" badge | ✅ | On app cards |
 | 80% warning color | ✅ | Progress bars change color |
 | Focus session card | ✅ | 25min / 45min / 60min quick-pick |
-| Manage App Limits link | ✅ | UI only — no screen |
+| Manage App Limits link | ✅ | UI only — no screen; bottom spacing adjusted to avoid nav overlap |
 
 ### 9.2 Missing Screens
 
@@ -367,10 +387,10 @@
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `useLocalStorage` | ✅ | Works on web (localStorage), stub for mobile |
+| `useLocalStorage` | ✅ | Works on web + AsyncStorage-backed behavior on mobile |
 | `useSubscription` | ✅ | Mock implementation — `isPremium: false` default |
-| `calculateStreak()` | 🔴 | Not implemented |
-| `daysClean()` | 🔴 | Not implemented |
+| `calculateStreak()` | 🟡 | Implemented in `stores/habitStore.ts`; requires P0 hardening |
+| `daysClean()` | 🟡 | `daysSinceQuit()` implemented; reset-on-relapse logic not complete |
 | Streak at risk logic | 🔴 | Not implemented |
 | Motivational quotes | ✅ | 18 quotes, deterministic day-of-year rotation |
 | Greeting logic | ✅ | Time-based morning/afternoon/evening/night |
@@ -381,10 +401,28 @@
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| Mock data (all screens) | 🟡 | All in-memory arrays, no persistence |
-| Firestore sync | ❌ | No backend integration |
-| Firebase Auth | ❌ | `firebaseConfig.js` exists but unused |
+| Local persistence (core modules) | ✅ | AsyncStorage stores active across app flows |
+| Firestore foundation | ✅ | Rules/indexes configured and deployed; emulator and CLI flow working |
+| Firestore sync in app runtime | 🟡 | Repository/data-source integration + sync queue wired; manual QA validation pending |
+| Firebase Auth in app runtime | 🟡 | Anonymous auth bootstrap wired; runtime uid validation still pending QA |
+| Hybrid backend docs | ✅ | `docs/data-policy.md`, `docs/firestore-schema.md`, `docs/firebase-cli-setup.md` |
 | Encrypted storage | ❌ | No encryption layer |
+
+### 14.1 Hybrid Backend Checklist Sync
+
+| Checklist Area (`phase1-hybrid-checklist.md`) | Status | Notes |
+|-----------------------------------------------|--------|-------|
+| 0) Decisions locked | ✅ | Cloud module scope, anonymous auth, and LWW policy checked off |
+| 1) Architecture guardrails | ✅ | Policy docs and constraints are explicit and aligned |
+| 2) Firebase foundation | 🟡 | Runtime modules wired; needs runtime/manual verification in app |
+| 3) Firestore schema + rules | 🟡 | Rules/indexes deployed; auth negative/positive path checks moved to in-progress QA |
+| 4) Repository layer | ✅ | Interfaces + local/firebase adapters + factory implemented |
+| 5) Store refactor (profile) | 🟡 | Routed through repository; regression pass pending |
+| 6) Store refactor (habits) | 🟡 | Routed through repository + queue; free-tier history check pending |
+| 7) Store refactor (goals/activity) | 🟡 | Routed through repositories; runtime validation pending |
+| 8) Local-only hard lock | 🟡 | Code-level local-only enforcement verified; runtime Firestore assertion pending |
+| 9) Sync reliability baseline | 🟡 | Queue + app-focus retry + logs implemented; resilience validation pending |
+| 10) Validation + QA gate | 🟡 | Type-check/lint + static verification done; runtime QA matrix in progress |
 
 ---
 
@@ -500,17 +538,29 @@
 | 2.5.6 | **Screen Time fixes** — Removed decorative overlay artifact, hero card changed to solid white with border | ✅ |
 | 2.5.7 | **Nav bar icons** — `home`, `checkmark-done`, `layers`, `flag`, `time` with filled/outline toggle | ✅ |
 
-## Phase 3 — Business Logic (P0) — ~10 hrs
+## Phase 3 — Logic Hardening (P0) — ~10 hrs
 
 *Implement core domain algorithms.*
 
 | # | Task | Effort | Depends On |
 |---|------|--------|------------|
-| 3.1 | `calculateStreak()` — supports all frequency types | 3 hrs | Phase 1 |
-| 3.2 | `daysClean()` — reset-on-relapse and keep-counter modes | 1.5 hrs | Phase 1 |
+| 3.1 | Harden `calculateStreak()` for all frequencies + edge cases | 3 hrs | Phase 1 |
+| 3.2 | Harden days-clean logic (reset-on-relapse + keep-counter modes) | 1.5 hrs | Phase 1 |
 | 3.3 | Streak at risk logic — flag habits not done after 22:00 | 1 hr | 3.1 |
 | 3.4 | Habit completion tracking — store completions, compute daily stats | 2 hrs | Phase 1 |
 | 3.5 | Free tier limit checks — 2 bad habits, 5 goals, 60 journal entries, 90-day history | 2 hrs | Phase 1 |
+
+## Phase 3.5 — Hybrid Backend Foundation (P0/P1) — ~8 hrs
+
+*Prepare Firebase-backed hybrid architecture without syncing sensitive modules.*
+
+| # | Task | Effort | Depends On |
+|---|------|--------|------------|
+| 3.5.1 | Finalize data policy + schema docs | 1 hr | — |
+| 3.5.2 | Firestore rules + indexes + Firebase CLI config | 1 hr | — |
+| 3.5.3 | Wire Firebase app/auth/firestore service modules | 2 hrs | 3.5.2 |
+| 3.5.4 | Add repository layer for Profile/Habits/Goals/Activity | 3 hrs | 3.5.3 |
+| 3.5.5 | Keep Journal + Bad Habits local-only with hard guards | 1 hr | 3.5.4 |
 
 ## Phase 4 — Premium Gating (P1) — ~5 hrs
 
@@ -543,9 +593,8 @@
 |---|------|--------|------------|
 | 6.1 | Create `eas.json` with build profiles | 1 hr | — |
 | 6.2 | Configure `app.json` — bundle ID, version, custom icon, splash | 1 hr | — |
-| 6.3 | Root-level onboarding route guard | 1 hr | Phase 1 |
-| 6.4 | Error boundaries + loading skeleton states | 2 hrs | Phase 1 |
-| 6.5 | Offline detection banner | 1 hr | — |
+| 6.3 | Error boundaries + loading skeleton states | 2 hrs | Phase 1 |
+| 6.4 | Offline detection banner | 1 hr | — |
 
 ---
 
@@ -556,17 +605,18 @@
 | Phase 1: Data Persistence | P0 | ~15 hrs | ✅ COMPLETE |
 | Phase 2: Missing Screens | P0 | ~12 hrs | ✅ COMPLETE |
 | Phase 2.5: UI Consistency | P1 | ~8 hrs | ✅ COMPLETE |
-| Phase 3: Business Logic | P0 | ~10 hrs |
+| Phase 3: Logic Hardening | P0 | ~10 hrs |
+| Phase 3.5: Hybrid Backend Foundation | P0/P1 | ~8 hrs |
 | Phase 4: Premium Gating | P1 | ~5 hrs |
 | Phase 5: Notifications | P1 | ~8 hrs |
 | Phase 6: Build & Deployment | P1 | ~6 hrs |
-| **Total to MVP** | | **~49 hrs** |
+| **Total to MVP** | | **~57 hrs** |
 
 ### Future Phases (Post-MVP)
 
 | Area | Priority | Estimated Hours |
 |------|----------|-----------------|
-| Firebase Auth + Firestore sync | P1 | ~12 hrs |
+| Advanced sync/conflict handling | P1 | ~12 hrs |
 | Encrypted storage (journal + bad habits) | P1 | ~8 hrs |
 | RevenueCat integration | P1 | ~3 hrs |
 | Screen time native modules | P1 | ~10 hrs |

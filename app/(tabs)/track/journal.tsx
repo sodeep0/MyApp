@@ -11,6 +11,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { safeBack } from '@/navigation/safeBack';
 import { getAllJournalEntries } from '@/stores/journalStore';
 import type { JournalEntry } from '@/types/models';
 
@@ -70,20 +71,14 @@ export default function JournalListScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.headerBtn}>
+        <Pressable onPress={() => safeBack(router, '/(tabs)/track')} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Journal</Text>
           <Text style={styles.headerSubtitle}>{getDateString()}</Text>
         </View>
-        <Pressable
-          style={({ pressed }) => [styles.newEntryBtn, { transform: [{ scale: pressed ? 0.95 : 1 }] }]}
-          onPress={() => router.push('/track/journal-entry' as any)}
-        >
-          <Ionicons name="add" size={18} color={Colors.Surface} />
-          <Text style={styles.newEntryBtnText}>New Entry</Text>
-        </Pressable>
+        <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.searchContainer}>
@@ -207,6 +202,20 @@ export default function JournalListScreen() {
           })
         )}
       </ScrollView>
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.fab,
+          {
+            right: Spacing.screenH + 22,
+            bottom: insets.bottom + 70,
+          },
+          { transform: [{ scale: pressed ? 0.94 : 1 }] },
+        ]}
+        onPress={() => router.push('/track/journal-entry' as any)}
+      >
+        <Ionicons name="add" size={28} color={Colors.Surface} />
+      </Pressable>
     </View>
   );
 }
@@ -248,21 +257,6 @@ const styles = StyleSheet.create({
     ...Typography.Body2,
     color: Colors.TextSecondary,
     marginTop: 2,
-  },
-  newEntryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.SteelBlue,
-    borderRadius: Shapes.PillButton,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    flexShrink: 0,
-  },
-  newEntryBtnText: {
-    ...Typography.Caption,
-    color: Colors.Surface,
-    fontWeight: '700',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -426,5 +420,15 @@ const styles = StyleSheet.create({
   tagMore: {
     ...Typography.Micro,
     color: Colors.TextSecondary,
+  },
+  fab: {
+    position: 'absolute',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.SteelBlue,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.FAB,
   },
 });

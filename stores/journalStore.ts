@@ -1,4 +1,4 @@
-// Journal entry store
+// Journal entry store (local-only by policy; never sync to Firebase)
 import type { JournalEntry } from '../types/models';
 import { generateUUID } from './baseStore';
 

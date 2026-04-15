@@ -10,6 +10,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { safeBack } from '@/navigation/safeBack';
 import { getAllBadHabits, daysSinceQuit } from '@/stores/badHabitStore';
 import type { BadHabit } from '@/types/models';
 
@@ -71,7 +72,7 @@ export default function BadHabitListScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.headerBtn}>
+        <Pressable onPress={() => safeBack(router, '/(tabs)/track')} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
         </Pressable>
         <View style={styles.headerCenter}>

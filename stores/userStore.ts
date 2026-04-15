@@ -1,56 +1,43 @@
 // User profile & preferences store
 import type { UserProfile, Intention } from '../types/models';
+import { getUserRepository } from '@/repositories/factory';
 
-const USER_PROFILE_KEY = 'kaarma_user_profile';
-const ONBOARDING_KEY = 'kaarma_onboarding_completed';
-const DISPLAY_NAME_KEY = 'kaarma_display_name';
-const INTENTIONS_KEY = 'kaarma_selected_intentions';
+function repo() {
+  return getUserRepository();
+}
 
 export async function getUserProfile(): Promise<UserProfile | null> {
-  const { storage } = await import('../storage/asyncStorage');
-  return storage.getItem<UserProfile>(USER_PROFILE_KEY);
+  return repo().getUserProfile();
 }
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  await storage.setItem(USER_PROFILE_KEY, profile);
+  await repo().saveUserProfile(profile);
 }
 
 export async function updateDisplayName(name: string): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  await storage.setItem(DISPLAY_NAME_KEY, name);
-  // Also update in profile
-  const profile = await getUserProfile();
-  if (profile) {
-    await saveUserProfile({ ...profile, displayName: name });
-  }
+  await repo().updateDisplayName(name);
 }
 
 export async function getDisplayName(): Promise<string> {
-  const { storage } = await import('../storage/asyncStorage');
-  return (await storage.getItem<string>(DISPLAY_NAME_KEY)) ?? 'User';
+  return repo().getDisplayName();
 }
 
 // ─── Onboarding ──────────────────────────────────────────────────────────────
 
 export async function isOnboardingCompleted(): Promise<boolean> {
-  const { storage } = await import('../storage/asyncStorage');
-  return (await storage.getItem<boolean>(ONBOARDING_KEY)) === true;
+  return repo().isOnboardingCompleted();
 }
 
 export async function setOnboardingCompleted(completed: boolean): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  await storage.setItem(ONBOARDING_KEY, completed);
+  await repo().setOnboardingCompleted(completed);
 }
 
 // ─── Intentions ──────────────────────────────────────────────────────────────
 
 export async function getSelectedIntentions(): Promise<Intention[]> {
-  const { storage } = await import('../storage/asyncStorage');
-  return (await storage.getItem<Intention[]>(INTENTIONS_KEY)) ?? [];
+  return repo().getSelectedIntentions();
 }
 
 export async function saveSelectedIntentions(intentions: Intention[]): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  await storage.setItem(INTENTIONS_KEY, intentions);
+  await repo().saveSelectedIntentions(intentions);
 }

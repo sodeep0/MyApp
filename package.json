@@ -8,7 +8,11 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "firebase:emulators": "firebase emulators:start --only firestore",
+    "firebase:rules:deploy": "firebase deploy --only firestore:rules",
+    "firebase:indexes:deploy": "firebase deploy --only firestore:indexes",
+    "firebase:firestore:deploy": "firebase deploy --only firestore:rules,firestore:indexes"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
