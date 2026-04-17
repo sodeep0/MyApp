@@ -76,6 +76,54 @@ export async function ensureAnonymousAuth(): Promise<User | null> {
   return bootstrapPromise;
 }
 
+export async function signInWithEmailPassword(email: string, password: string): Promise<User> {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    throw new Error('Firebase auth is not configured.');
+  }
+
+  const credential = await FirebaseAuth.signInWithEmailAndPassword(auth, email, password);
+  return credential.user;
+}
+
+export async function createAccountWithEmailPassword(
+  email: string,
+  password: string,
+  displayName?: string,
+): Promise<User> {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    throw new Error('Firebase auth is not configured.');
+  }
+
+  const credential = await FirebaseAuth.createUserWithEmailAndPassword(auth, email, password);
+  if (displayName?.trim()) {
+    await FirebaseAuth.updateProfile(credential.user, { displayName: displayName.trim() });
+  }
+  return credential.user;
+}
+
+export async function signOutCurrentUser(): Promise<void> {
+  const auth = getFirebaseAuth();
+  if (!auth) return;
+  await FirebaseAuth.signOut(auth);
+}
+
+export async function signInWithGoogleIdToken(idToken: string): Promise<User> {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    throw new Error('Firebase auth is not configured.');
+  }
+
+  const credential = FirebaseAuth.GoogleAuthProvider.credential(idToken);
+  const result = await FirebaseAuth.signInWithCredential(auth, credential);
+  return result.user;
+}
+
+export function getCurrentUserEmail(): string | null {
+  return getFirebaseAuth()?.currentUser?.email ?? null;
+}
+
 export function getCurrentUserId(): string | null {
   return getFirebaseAuth()?.currentUser?.uid ?? null;
 }

@@ -85,6 +85,63 @@ export async function logUrgeEvent(data: Omit<UrgeEvent, 'id' | 'loggedAt'>): Pr
 export function daysSinceQuit(quitDateStr: string): number {
   const quitDate = new Date(quitDateStr);
   const now = new Date();
-  const diffMs = now.getTime() - quitDate.getTime();
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const quitDay = new Date(quitDate.getFullYear(), quitDate.getMonth(), quitDate.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.floor((today.getTime() - quitDay.getTime()) / 86400000);
+}
+
+export function currentStreakDays(quitDateStr: string, urgeEvents: UrgeEvent[]): number {
+  const resetDates = urgeEvents
+    .filter((e) => e.type === 'RELAPSE' && e.resetCounter)
+    .map((e) => {
+      const d = new Date(e.loggedAt);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    })
+    .sort((a, b) => a - b);
+
+  if (resetDates.length === 0) return daysSinceQuit(quitDateStr);
+
+  const lastReset = resetDates[resetDates.length - 1];
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.floor((today.getTime() - lastReset) / 86400000);
+}
+
+export function bestStreakDays(quitDateStr: string, urgeEvents: UrgeEvent[]): number {
+  const resetDates = urgeEvents
+    .filter((e) => e.type === 'RELAPSE' && e.resetCounter)
+    .map((e) => {
+      const d = new Date(e.loggedAt);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    })
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  const quitDate = new Date(quitDateStr);
+  const quitDay = new Date(quitDate.getFullYear(), quitDate.getMonth(), quitDate.getDate());
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (resetDates.length === 0) {
+    return Math.floor((today.getTime() - quitDay.getTime()) / 86400000);
+  }
+
+  let best = 0;
+  let start = new Date(quitDay);
+
+  for (const reset of resetDates) {
+    const diff = Math.floor((reset.getTime() - start.getTime()) / 86400000);
+    if (diff > best) best = diff;
+    start = reset;
+  }
+
+  const finalDiff = Math.floor((today.getTime() - start.getTime()) / 86400000);
+  if (finalDiff > best) best = finalDiff;
+
+  return best;
+}
+
+export function totalCleanDays(quitDateStr: string, urgeEvents: UrgeEvent[]): number {
+  const totalDays = daysSinceQuit(quitDateStr);
+  const relapseDays = urgeEvents.filter((e) => e.type === 'RELAPSE' && e.resetCounter).length;
+  return Math.max(0, totalDays - relapseDays);
 }

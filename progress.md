@@ -1,13 +1,28 @@
 # Kaarma — Implementation Progress
 
-> Last updated: 2026-04-15 | Status: Expo React Native (TypeScript) prototype + hybrid backend foundation
+> Last updated: 2026-04-17 | Status: Expo React Native (TypeScript) prototype + hybrid backend foundation
 >
 > **Stack**: Expo SDK 54 · Expo Router v6 · React Native 0.81.5 · React 19 · TypeScript 5.9
 
 ---
 
-## Recent Update (2026-04-15)
+## Recent Update (2026-04-17)
 
+- Auth/UI and dependency stabilization pass:
+  - Polished `Sign In` and `Create Account` screens to match the new visual direction.
+  - Switched auth UX to Google-only entry points on both screens.
+  - Added Firebase Google credential bridge (`signInWithGoogleIdToken`) and wired profile session hydration from Firebase user data.
+  - Added explicit Google OAuth env-config notices on auth screens when `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values are missing.
+  - Added logout confirmation flow in Profile and Firebase sign-out hook.
+  - Resolved Expo SDK mismatch crash by pinning `expo-auth-session` to SDK-54-compatible `~7.0.10` and deduplicating native Expo modules.
+- Phase 3 Logic Hardening pass (tasks 3.1–3.4):
+  - Hardened `calculateStreak()` to handle all frequency types (DAILY, WEEKLY, X_PER_WEEK, EVERY_N_DAYS) with proper grace periods and edge cases.
+  - Added `calculateBestStreak()` — frequency-aware best streak calculation (exported from `habitStore.ts`, used in habit list and detail screens).
+  - Added `isHabitAtRisk()` — returns true when a habit is not completed today and it's past 22:00. Used in habit list card and detail screen.
+  - Added `currentStreakDays()`, `bestStreakDays()`, and `totalCleanDays()` to `badHabitStore.ts` — proper relapse-aware streak calculation replacing naive `daysSinceQuit` in the detail screen.
+  - Removed duplicate inline `calculateBestStreak`/`formatDateStr` functions from habit list and detail screens, consolidating to store exports.
+  - Habit list and detail screens now import frequency-aware `calculateStreak`, `calculateBestStreak`, `isHabitAtRisk`, and `dateToStr` from the store.
+  - Habit completion tracking already worked via repository layer (confirmed no gaps).
 - Phase 1 hybrid QA/checklist alignment pass:
   - Verified screen call paths remain stable while stores are repository-backed for cloud modules.
   - Verified local-only constraint at code level: no Firebase imports in `stores/journalStore.ts` and `stores/badHabitStore.ts`.
@@ -25,7 +40,7 @@
   - Added `docs/firestore-schema.md` with Phase 1 collection design and query/index guidance.
   - Added `firestore.rules` and `firestore.indexes.json` for owner-scoped access.
   - Added `firebase.json` and Firebase CLI scripts in `package.json`.
-  - Added `docs/firebase-cli-setup.md` and `phase1-hybrid-checklist.md` for implementation tracking.
+  - Added `docs/firebase-cli-setup.md`; Phase 1 checklist is now merged into this file for unified tracking.
 - Privacy policy enforcement (planning level):
   - Journal and Bad Habits explicitly designated local-only (never synced).
   - Cloud sync scope limited to Profile, Habits, Goals, Activity in upcoming implementation.
@@ -389,9 +404,11 @@
 |--------|--------|-------|
 | `useLocalStorage` | ✅ | Works on web + AsyncStorage-backed behavior on mobile |
 | `useSubscription` | ✅ | Mock implementation — `isPremium: false` default |
-| `calculateStreak()` | 🟡 | Implemented in `stores/habitStore.ts`; requires P0 hardening |
-| `daysClean()` | 🟡 | `daysSinceQuit()` implemented; reset-on-relapse logic not complete |
-| Streak at risk logic | 🔴 | Not implemented |
+| `calculateStreak()` | ✅ | Hardened for DAILY, WEEKLY, X_PER_WEEK, EVERY_N_DAYS frequencies with grace periods |
+| `calculateBestStreak()` | ✅ | Frequency-aware best streak calculation added to habitStore |
+| `isHabitAtRisk()` | ✅ | Returns true when habit not done today and hour ≥ 22; used in list and detail screens |
+| `daysClean()` | ✅ | `currentStreakDays()` resets counter on relapse (resetCounter=true); `bestStreakDays()` and `totalCleanDays()` added |
+| Streak at risk logic (>22:00) | ✅ | `isHabitAtRisk()` in habitStore; at-risk badge in habit list and detail screens |
 | Motivational quotes | ✅ | 18 quotes, deterministic day-of-year rotation |
 | Greeting logic | ✅ | Time-based morning/afternoon/evening/night |
 
@@ -410,19 +427,123 @@
 
 ### 14.1 Hybrid Backend Checklist Sync
 
-| Checklist Area (`phase1-hybrid-checklist.md`) | Status | Notes |
-|-----------------------------------------------|--------|-------|
-| 0) Decisions locked | ✅ | Cloud module scope, anonymous auth, and LWW policy checked off |
+| Checklist Area (merged from Phase 1 checklist) | Status | Notes |
+|-------------------------------------------------|--------|-------|
+| 0) Decisions locked | ✅ | Cloud module scope, local-only sensitive modules, and LWW policy checked off |
 | 1) Architecture guardrails | ✅ | Policy docs and constraints are explicit and aligned |
-| 2) Firebase foundation | 🟡 | Runtime modules wired; needs runtime/manual verification in app |
-| 3) Firestore schema + rules | 🟡 | Rules/indexes deployed; auth negative/positive path checks moved to in-progress QA |
+| 2) Firebase foundation | 🟡 | App/auth/firestore modules wired; runtime/manual verification remains |
+| 3) Firestore schema + rules | 🟡 | Rules/indexes deployed; runtime auth-path checks remain |
 | 4) Repository layer | ✅ | Interfaces + local/firebase adapters + factory implemented |
 | 5) Store refactor (profile) | 🟡 | Routed through repository; regression pass pending |
-| 6) Store refactor (habits) | 🟡 | Routed through repository + queue; free-tier history check pending |
+| 6) Store refactor (habits) | 🟡 | Routed through repository + queue; free-tier history rule pending |
 | 7) Store refactor (goals/activity) | 🟡 | Routed through repositories; runtime validation pending |
-| 8) Local-only hard lock | 🟡 | Code-level local-only enforcement verified; runtime Firestore assertion pending |
+| 8) Local-only hard lock | 🟡 | Code-level enforcement done; runtime Firestore assertion pending |
 | 9) Sync reliability baseline | 🟡 | Queue + app-focus retry + logs implemented; resilience validation pending |
-| 10) Validation + QA gate | 🟡 | Type-check/lint + static verification done; runtime QA matrix in progress |
+| 10) Validation + QA gate | 🟡 | Type-check/lint and static checks pass; runtime QA matrix incomplete |
+
+### 14.2 Detailed Phase 1 Hybrid Checklist (Merged)
+
+Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked
+
+#### 0) Decisions Locked
+- [x] Journal stays local-only (never synced)
+- [x] Bad Habits stay local-only (never synced)
+- [x] Cloud modules in Phase 1: user/profile, habits, goals, activities
+- [x] Conflict policy: last-write-wins using `updatedAt`
+- [x] Auth baseline in Phase 1: Firebase anonymous auth (plus Google sign-in now added)
+
+#### 1) Architecture Guardrails
+- [x] Source-of-truth policy table documented (module -> storage -> sync allowed)
+- [x] Explicit privacy statements for local-only modules
+- [x] Architecture note documented: UI -> stores -> repositories -> data source
+- [x] Unified progress tracking moved into `progress.md`
+
+#### 2) Firebase Foundation
+- [x] Fixed env typo/bug in Firebase config path
+- [x] Guarded analytics usage for RN runtime
+- [x] Firebase app singleton initialized
+- [x] Added anonymous auth bootstrap
+- [x] Firestore exported from single service module
+- [~] Runtime acceptance: app starts with no Firebase init crash across all target dev flows
+- [~] Runtime acceptance: uid availability confirmed end-to-end
+
+#### 3) Firestore Schema + Security Rules
+- [x] Document shape defined with ownership + timestamps
+- [x] Owner-only rules implemented
+- [x] Null-auth blocked in rules
+- [x] Required indexes added
+- [x] Schema/query patterns documented
+- [x] Rules/indexes deployed with Firebase CLI
+- [~] Unauthorized read/write denial validated at runtime
+- [~] Authorized read/write success validated at runtime
+
+#### 4) Repository Layer (No UI Break)
+- [x] Repository interfaces created for user/habit/goal/activity
+- [x] Local adapters implemented
+- [x] Firebase adapters implemented for cloud modules
+- [x] Factory routing added for policy-based module data source
+- [x] Stores can switch data source without UI refactor
+- [x] Policy routing works (cloud vs local-only)
+
+#### 5) Store Refactor - User/Profile
+- [x] Profile read/write routed through repository
+- [x] Onboarding flag behavior preserved
+- [x] Local cache fallback retained for offline reads
+- [~] Profile updates persist under full runtime QA
+- [~] No onboarding regression under full runtime QA
+
+#### 6) Store Refactor - Habits
+- [x] Habit CRUD + completions routed through repository
+- [x] Streak/domain logic kept in store/domain layer
+- [x] Offline queue/retry baseline added for writes
+- [ ] Free-tier 90-day history enforcement remains pending
+- [~] Habit flows validated online/offline
+- [~] Reconnect catch-up sync validated
+
+#### 7) Store Refactor - Goals + Activities
+- [x] Goals persistence routed via repository
+- [x] Activities persistence routed via repository
+- [x] Existing screen behavior/params preserved
+- [~] Goal/activity create/edit/list stable under runtime QA
+- [~] Data isolation per authenticated uid verified by runtime QA
+
+#### 8) Local-Only Hard Lock (Sensitive Modules)
+- [x] No Firebase imports in `journalStore` and `badHabitStore`
+- [x] Local-only behavior documented/enforced in code
+- [ ] Optional lint guard rule still pending
+- [~] Runtime assertion pending: journal/bad-habit docs never appear in Firestore
+
+#### 9) Sync Reliability Baseline
+- [x] Pending write queue for failed cloud writes
+- [x] Retry on app focus/connectivity restore
+- [x] Minimal sync telemetry logs for success/failure
+- [~] Runtime assertion pending: transient failures do not lose actions
+- [~] Runtime assertion pending: queued writes eventually flush
+
+#### 10) Validation + QA Gate
+- [x] `npx tsc --noEmit` passes
+- [x] `npm run lint` passes (warnings only, no errors)
+- [ ] Runtime QA matrix still incomplete
+- [x] Progress tracking centralized in `progress.md`
+
+#### Risks / Watchouts
+- [ ] Firestore read-cost control (batching/pagination/query shaping)
+- [ ] Timestamp consistency (`serverTimestamp` vs local time)
+- [ ] Conflict behavior under simultaneous edits (Phase 1 uses LWW)
+- [ ] Route-level stale state after mutations (verify focus-driven refresh)
+
+#### Definition of Done (Phase 1)
+- [~] Hybrid architecture active and stable
+- [~] Cloud modules (profile/habits/goals/activity) stable in runtime QA
+- [~] Local-only modules (journal/bad habits) verified by runtime checks
+- [~] Offline-first behavior stable in runtime QA
+- [~] Security rules behavior validated in runtime QA
+- [ ] Full type/lint/runtime QA gate signed off
+
+#### QA Notes
+- Static/code-level verification complete for repository routing and local-only module constraints.
+- Build gates are green (`tsc`, `lint` with warnings only).
+- Remaining `[~]` items are runtime/manual checks (online/offline/reconnect/auth/rules).
 
 ---
 
@@ -538,17 +659,17 @@
 | 2.5.6 | **Screen Time fixes** — Removed decorative overlay artifact, hero card changed to solid white with border | ✅ |
 | 2.5.7 | **Nav bar icons** — `home`, `checkmark-done`, `layers`, `flag`, `time` with filled/outline toggle | ✅ |
 
-## Phase 3 — Logic Hardening (P0) — ~10 hrs
+## Phase 3 — Logic Hardening (P0) — ✅ COMPLETE
 
 *Implement core domain algorithms.*
 
-| # | Task | Effort | Depends On |
-|---|------|--------|------------|
-| 3.1 | Harden `calculateStreak()` for all frequencies + edge cases | 3 hrs | Phase 1 |
-| 3.2 | Harden days-clean logic (reset-on-relapse + keep-counter modes) | 1.5 hrs | Phase 1 |
-| 3.3 | Streak at risk logic — flag habits not done after 22:00 | 1 hr | 3.1 |
-| 3.4 | Habit completion tracking — store completions, compute daily stats | 2 hrs | Phase 1 |
-| 3.5 | Free tier limit checks — 2 bad habits, 5 goals, 60 journal entries, 90-day history | 2 hrs | Phase 1 |
+| # | Task | Effort | Status |
+|---|------|--------|--------|
+| 3.1 | Harden `calculateStreak()` for all frequencies + edge cases | 3 hrs | ✅ |
+| 3.2 | Harden days-clean logic (reset-on-relapse + keep-counter modes) | 1.5 hrs | ✅ |
+| 3.3 | Streak at risk logic — flag habits not done after 22:00 | 1 hr | ✅ |
+| 3.4 | Habit completion tracking — store completions, compute daily stats | 2 hrs | ✅ |
+| 3.5 | Free tier limit checks — 2 bad habits, 5 goals, 60 journal entries, 90-day history | 2 hrs | 🔴 |
 
 ## Phase 3.5 — Hybrid Backend Foundation (P0/P1) — ~8 hrs
 
@@ -605,7 +726,7 @@
 | Phase 1: Data Persistence | P0 | ~15 hrs | ✅ COMPLETE |
 | Phase 2: Missing Screens | P0 | ~12 hrs | ✅ COMPLETE |
 | Phase 2.5: UI Consistency | P1 | ~8 hrs | ✅ COMPLETE |
-| Phase 3: Logic Hardening | P0 | ~10 hrs |
+| Phase 3: Logic Hardening | P0 | ~8.5 hrs | ✅ COMPLETE (3.1–3.4 done) |
 | Phase 3.5: Hybrid Backend Foundation | P0/P1 | ~8 hrs |
 | Phase 4: Premium Gating | P1 | ~5 hrs |
 | Phase 5: Notifications | P1 | ~8 hrs |

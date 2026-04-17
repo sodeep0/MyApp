@@ -15,7 +15,7 @@ import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme'
 import { safeBack } from '@/navigation/safeBack';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
-import { getBadHabitById, getUrgeEventsForHabit, logUrgeEvent, daysSinceQuit } from '@/stores/badHabitStore';
+import { getBadHabitById, getUrgeEventsForHabit, logUrgeEvent, currentStreakDays, bestStreakDays, totalCleanDays } from '@/stores/badHabitStore';
 import {
   UrgeEventType,
   type BadHabit,
@@ -83,31 +83,6 @@ function getCalendarGrid(quitDate: string, relapseDates: string[], displayMonth:
     monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
     todayDay: isCurrentMonth ? now.getDate() : null,
   };
-}
-
-function getBestStreak(events: UrgeEvent[], quitDate: string): number {
-  const relapseDates = events
-    .filter((e) => e.type === 'RELAPSE' && e.resetCounter)
-    .map((e) => e.loggedAt.slice(0, 10))
-    .sort();
-  if (relapseDates.length === 0) return daysSinceQuit(quitDate);
-  let best = 0;
-  let start = new Date(quitDate);
-  for (const rd of relapseDates) {
-    const end = new Date(rd);
-    const diff = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    if (diff > best) best = diff;
-    start = end;
-  }
-  const finalDiff = daysSinceQuit(relapseDates[relapseDates.length - 1]);
-  if (finalDiff > best) best = finalDiff;
-  return best;
-}
-
-function getTotalCleanDays(events: UrgeEvent[], quitDate: string): number {
-  const totalDays = daysSinceQuit(quitDate);
-  const relapseDays = events.filter((e) => e.type === 'RELAPSE' && e.resetCounter).length;
-  return Math.max(0, totalDays - relapseDays);
 }
 
 function formatEventDateLabel(isoDate: string): string {
@@ -199,7 +174,7 @@ export default function BadHabitDetailScreen() {
     );
   }
 
-  const cleanDays = daysSinceQuit(habit.quitDate);
+  const cleanDays = currentStreakDays(habit.quitDate, urgeEvents);
   const lastRelapse = urgeEvents
     .filter((e) => e.type === 'RELAPSE')
     .sort((a, b) => b.loggedAt.localeCompare(a.loggedAt))[0];
@@ -233,8 +208,8 @@ export default function BadHabitDetailScreen() {
     .map((e) => e.loggedAt.slice(0, 10));
 
   const cal = getCalendarGrid(habit.quitDate, relapseDates, calendarMonth);
-  const bestStreak = getBestStreak(urgeEvents, habit.quitDate);
-  const totalClean = getTotalCleanDays(urgeEvents, habit.quitDate);
+  const bestStreak = bestStreakDays(habit.quitDate, urgeEvents);
+  const totalClean = totalCleanDays(habit.quitDate, urgeEvents);
 
   const now = new Date();
   const currentMonthIndex = now.getFullYear() * 12 + now.getMonth();

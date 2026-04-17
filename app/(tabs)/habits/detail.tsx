@@ -20,6 +20,9 @@ import {
   getTodayCompletionsForHabit,
   markHabitComplete,
   calculateStreak,
+  calculateBestStreak,
+  isHabitAtRisk,
+  dateToStr,
 } from '@/stores/habitStore';
 import type { Habit, HabitCompletion } from '@/types/models';
 
@@ -42,13 +45,6 @@ const FREQUENCY_LABELS: Record<string, string> = {
 };
 
 type TabType = 'history' | 'calendar' | 'stats';
-
-function formatDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
 
 function getMonthlyCalendar(
   completions: HabitCompletion[],
@@ -76,7 +72,7 @@ function getMonthlyCalendar(
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateObj = new Date(year, month, d);
-    const dateStr = formatDateStr(dateObj);
+    const dateStr = dateToStr(dateObj);
     if (dateObj > todayStart) {
       cells.push({ day: d, status: 'future' });
     } else if (dateObj < habitStartDay) {
@@ -95,27 +91,6 @@ function getMonthlyCalendar(
   };
 }
 
-function calculateBestStreak(completions: HabitCompletion[]): number {
-  if (completions.length === 0) return 0;
-  const dateSet = new Set(completions.map(c => c.completedDate));
-  const sortedDates = [...dateSet].sort();
-  if (sortedDates.length === 0) return 0;
-  let bestStreak = 1;
-  let currentStreak = 1;
-  for (let i = 1; i < sortedDates.length; i++) {
-    const prev = new Date(sortedDates[i - 1]);
-    const curr = new Date(sortedDates[i]);
-    const diffDays = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays === 1) {
-      currentStreak++;
-      bestStreak = Math.max(bestStreak, currentStreak);
-    } else {
-      currentStreak = 1;
-    }
-  }
-  return bestStreak;
-}
-
 export default function HabitDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
@@ -132,6 +107,7 @@ export default function HabitDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [atRisk, setAtRisk] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -149,10 +125,11 @@ export default function HabitDetailScreen() {
     const comps = await getCompletionsForHabit(id);
     const todayComps = await getTodayCompletionsForHabit(id);
     const currentStreak = calculateStreak(comps, habitData.frequency, habitData.weekDays, habitData.timesPerWeek, habitData.everyNDays);
-    const calculatedBest = calculateBestStreak(comps);
+    const calculatedBest = calculateBestStreak(comps, habitData.frequency, habitData.weekDays, habitData.timesPerWeek, habitData.everyNDays);
 
     setCompletions(comps);
     setCompletedToday(todayComps.length > 0);
+    setAtRisk(isHabitAtRisk(habitData, comps));
     setStreak(currentStreak);
     setBestStreak(Math.max(calculatedBest, currentStreak));
     setTotalDone(comps.length);
@@ -171,10 +148,10 @@ export default function HabitDetailScreen() {
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      weekDates.push(formatDateStr(d));
+      weekDates.push(dateToStr(d));
     }
     const completionDates = new Set(comps.map(c => c.completedDate));
-    const todayStr = formatDateStr(now);
+    const todayStr = dateToStr(now);
     const completedDays = weekDates.filter(d => d <= todayStr && completionDates.has(d)).length;
     const daysElapsed = weekDates.filter(d => d <= todayStr).length;
     setWeekCompletionPct(daysElapsed > 0 ? completedDays / daysElapsed : 0);
@@ -280,6 +257,13 @@ export default function HabitDetailScreen() {
           </View>
           <View style={styles.heroDecoration} />
         </LinearGradient>
+
+        {atRisk && (
+          <View style={styles.atRiskBanner}>
+            <Ionicons name="warning" size={16} color={Colors.Danger} />
+            <Text style={styles.atRiskBannerText}>STREAK AT RISK — Complete today to keep your streak</Text>
+          </View>
+        )}
 
         <View style={styles.habitInfo}>
           <Text style={styles.habitName}>{habit.name}</Text>
@@ -460,7 +444,7 @@ export default function HabitDetailScreen() {
               for (let i = 0; i < 7; i++) {
                 const d = new Date();
                 d.setDate(d.getDate() - i);
-                const ds = formatDateStr(d);
+                const ds = dateToStr(d);
                 days.push({ label: i === 0 ? 'Today' : i === 1 ? 'Yesterday' : `${i} days ago`, done: dateSet.has(ds) });
               }
               return days.map((entry) => (
@@ -604,6 +588,23 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     opacity: 0.9,
     marginTop: 4,
+  },
+  atRiskBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.Danger + '12',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Shapes.Chip,
+    marginTop: Spacing.md,
+  },
+  atRiskBannerText: {
+    ...Typography.Caption,
+    color: Colors.Danger,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   heroDecoration: {
     position: 'absolute',

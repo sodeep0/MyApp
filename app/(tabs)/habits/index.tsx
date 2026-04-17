@@ -18,6 +18,7 @@ import {
   markHabitComplete,
   unmarkHabitComplete,
   calculateStreak,
+  isHabitAtRisk,
   getCompletionsForHabit,
 } from '@/stores/habitStore';
 import type { Habit, HabitCompletion } from '@/types/models';
@@ -45,10 +46,7 @@ function getDateString() {
 }
 
 function formatDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function getCurrentWeekDates(): string[] {
@@ -66,11 +64,10 @@ function getCurrentWeekDates(): string[] {
   return dates;
 }
 
-function calculateBestStreak(completions: HabitCompletion[]): number {
+function getBestStreakLocal(completions: HabitCompletion[]): number {
   if (completions.length === 0) return 0;
   const dateSet = new Set(completions.map(c => c.completedDate));
   const sortedDates = [...dateSet].sort();
-  if (sortedDates.length === 0) return 0;
   let bestStreak = 1;
   let currentStreak = 1;
   for (let i = 1; i < sortedDates.length; i++) {
@@ -93,6 +90,7 @@ interface WeekData {
   bestStreak: number;
   streak: number;
   completedToday: boolean;
+  atRisk: boolean;
 }
 
 function HabitCard({
@@ -109,10 +107,9 @@ function HabitCard({
   disabled?: boolean;
 }) {
   const iconInfo = CATEGORY_ICONS[habit.category] || CATEGORY_ICONS.CUSTOM;
-  const isAtRisk = !weekData.completedToday && new Date().getHours() >= 22;
 
   return (
-    <View style={[styles.habitCard, isAtRisk && styles.habitCardAtRisk]}>
+    <View style={[styles.habitCard, weekData.atRisk && styles.habitCardAtRisk]}>
       <View style={styles.habitCardTop}>
         <View style={styles.habitCardLeft}>
           <Pressable onPress={onPress}>
@@ -144,7 +141,7 @@ function HabitCard({
         </Pressable>
       </View>
 
-      {isAtRisk && (
+      {weekData.atRisk && (
         <View style={styles.atRiskBadge}>
           <Ionicons name="warning" size={12} color={Colors.Danger} />
           <Text style={styles.atRiskText}>STREAK AT RISK</Text>
@@ -232,7 +229,7 @@ export default function HabitListScreen() {
             habit.timesPerWeek,
             habit.everyNDays,
           );
-          const bestStreak = calculateBestStreak(completions);
+          const bestStreak = getBestStreakLocal(completions);
 
           dataMap[habit.id] = {
             dots,
@@ -240,6 +237,7 @@ export default function HabitListScreen() {
             bestStreak,
             streak,
             completedToday: todayComps.length > 0,
+            atRisk: isHabitAtRisk(habit, completions),
           };
         }),
       );
@@ -281,6 +279,7 @@ export default function HabitListScreen() {
         completedToday: nextCompletedToday,
         dots: nextDots,
         completionPct: nextCompletionPct,
+        atRisk: false,
       },
     }));
     setPendingToggleIds((prev) => ({ ...prev, [habitId]: true }));
@@ -388,7 +387,7 @@ export default function HabitListScreen() {
               <HabitCard
                 key={habit.id}
                 habit={habit}
-                weekData={weekDataMap[habit.id] || { dots: [false,false,false,false,false,false,false], completionPct: 0, bestStreak: 0, streak: 0, completedToday: false }}
+                weekData={weekDataMap[habit.id] || { dots: [false,false,false,false,false,false,false], completionPct: 0, bestStreak: 0, streak: 0, completedToday: false, atRisk: false }}
                 onPress={() => router.push(`/(tabs)/habits/detail?id=${habit.id}` as any)}
                 onToggle={() => handleToggle(habit.id)}
                 disabled={Boolean(pendingToggleIds[habit.id])}
