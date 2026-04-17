@@ -131,6 +131,7 @@ export default function HabitDetailScreen() {
   const [weekCompletionPct, setWeekCompletionPct] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -187,9 +188,19 @@ export default function HabitDetailScreen() {
   }, [loadData]);
 
   const handleMarkComplete = async () => {
-    if (!id || typeof id !== 'string') return;
-    await markHabitComplete(id);
-    await loadData();
+    if (!id || typeof id !== 'string' || completedToday || isCompleting) return;
+
+    setIsCompleting(true);
+    setCompletedToday(true);
+
+    try {
+      await markHabitComplete(id);
+    } catch {
+      setCompletedToday(false);
+    } finally {
+      setIsCompleting(false);
+      void loadData();
+    }
   };
 
   const handleRefresh = async () => {
@@ -508,8 +519,10 @@ export default function HabitDetailScreen() {
                 style={styles.ctaButton}
               >
                 <Pressable
+                  disabled={isCompleting}
                   style={({ pressed }) => [
                     styles.ctaPressable,
+                    isCompleting && { opacity: 0.8 },
                     { transform: [{ scale: pressed ? 0.98 : 1 }] },
                   ]}
                   onPress={handleMarkComplete}

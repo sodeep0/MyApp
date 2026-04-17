@@ -254,6 +254,9 @@ export default function HomeScreen() {
     Object.values(streaks).length > 0 ? Math.max(...Object.values(streaks)) : 0;
   const recoveryProgress = Math.min(bestStreakDays / 30, 1);
   const recoveryPct = Math.round(recoveryProgress * 100);
+  const recentHabits = [...habits]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 4);
 
   const toggleComplete = async (habitId: string) => {
     if (todayDone.has(habitId)) {
@@ -430,7 +433,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
             )}
-            {habits.map((habit) => {
+            {recentHabits.map((habit) => {
               const completed = todayDone.has(habit.id);
               const streak = streaks[habit.id] || 0;
               return (

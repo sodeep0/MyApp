@@ -41,8 +41,9 @@ export const habitLocalRepository: HabitRepository = {
       isArchived: false,
       streakShieldsRemaining: 0,
     };
-    await this.saveHabits([...habits, newHabit]);
-    return habits;
+    const updatedHabits = [...habits, newHabit];
+    await this.saveHabits(updatedHabits);
+    return updatedHabits;
   },
 
   async updateHabit(id, updates) {

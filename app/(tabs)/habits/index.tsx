@@ -100,11 +100,13 @@ function HabitCard({
   weekData,
   onPress,
   onToggle,
+  disabled = false,
 }: {
   habit: Habit;
   weekData: WeekData;
   onPress: () => void;
   onToggle: () => void;
+  disabled?: boolean;
 }) {
   const iconInfo = CATEGORY_ICONS[habit.category] || CATEGORY_ICONS.CUSTOM;
   const isAtRisk = !weekData.completedToday && new Date().getHours() >= 22;
@@ -133,7 +135,7 @@ function HabitCard({
             </View>
           </Pressable>
         </View>
-        <Pressable onPress={onToggle} style={styles.toggleBtn}>
+        <Pressable onPress={onToggle} style={styles.toggleBtn} disabled={disabled}>
           <Ionicons
             name={weekData.completedToday ? 'checkmark-circle' : 'ellipse-outline'}
             size={32}
@@ -200,41 +202,52 @@ export default function HabitListScreen() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [weekDataMap, setWeekDataMap] = useState<Record<string, WeekData>>({});
   const [loading, setLoading] = useState(true);
+  const [pendingToggleIds, setPendingToggleIds] = useState<Record<string, boolean>>({});
 
   const loadData = useCallback(async () => {
-    const habitsData = await getAllHabits();
-    setHabits(habitsData);
+    try {
+      const habitsData = await getAllHabits();
+      const sortedHabits = [...habitsData].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      setHabits(sortedHabits);
 
-    const weekDates = getCurrentWeekDates();
-    const today = formatDateStr(new Date());
-    const dataMap: Record<string, WeekData> = {};
+      const weekDates = getCurrentWeekDates();
+      const today = formatDateStr(new Date());
+      const dataMap: Record<string, WeekData> = {};
 
-    await Promise.all(
-      habitsData.map(async (habit) => {
-        const completions = await getCompletionsForHabit(habit.id);
-        const todayComps = await getTodayCompletionsForHabit(habit.id);
-        const completionDates = new Set(completions.map(c => c.completedDate));
+      await Promise.all(
+        sortedHabits.map(async (habit) => {
+          const completions = await getCompletionsForHabit(habit.id);
+          const todayComps = await getTodayCompletionsForHabit(habit.id);
+          const completionDates = new Set(completions.map((c) => c.completedDate));
 
-        const dots = weekDates.map(date => completionDates.has(date));
-        const completedDays = dots.filter(d => d).length;
-        const daysElapsed = weekDates.filter(d => d <= today).length;
-        const completionPct = daysElapsed > 0 ? completedDays / daysElapsed : 0;
+          const dots = weekDates.map((date) => completionDates.has(date));
+          const completedDays = dots.filter((d) => d).length;
+          const daysElapsed = weekDates.filter((d) => d <= today).length;
+          const completionPct = daysElapsed > 0 ? completedDays / daysElapsed : 0;
 
-        const streak = calculateStreak(completions, habit.frequency, habit.weekDays, habit.timesPerWeek, habit.everyNDays);
-        const bestStreak = calculateBestStreak(completions);
+          const streak = calculateStreak(
+            completions,
+            habit.frequency,
+            habit.weekDays,
+            habit.timesPerWeek,
+            habit.everyNDays,
+          );
+          const bestStreak = calculateBestStreak(completions);
 
-        dataMap[habit.id] = {
-          dots,
-          completionPct,
-          bestStreak,
-          streak,
-          completedToday: todayComps.length > 0,
-        };
-      }),
-    );
+          dataMap[habit.id] = {
+            dots,
+            completionPct,
+            bestStreak,
+            streak,
+            completedToday: todayComps.length > 0,
+          };
+        }),
+      );
 
-    setWeekDataMap(dataMap);
-    setLoading(false);
+      setWeekDataMap(dataMap);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -244,14 +257,50 @@ export default function HabitListScreen() {
   );
 
   const handleToggle = async (habitId: string) => {
+    if (pendingToggleIds[habitId]) return;
+
     const data = weekDataMap[habitId];
     if (!data) return;
-    if (data.completedToday) {
-      await unmarkHabitComplete(habitId);
-    } else {
-      await markHabitComplete(habitId);
+
+    const weekDates = getCurrentWeekDates();
+    const today = formatDateStr(new Date());
+    const todayIdx = weekDates.indexOf(today);
+    const nextCompletedToday = !data.completedToday;
+    const nextDots = [...data.dots];
+    if (todayIdx >= 0) {
+      nextDots[todayIdx] = nextCompletedToday;
     }
-    await loadData();
+    const daysElapsed = weekDates.filter((d) => d <= today).length;
+    const completedDays = nextDots.filter((done, idx) => done && weekDates[idx] <= today).length;
+    const nextCompletionPct = daysElapsed > 0 ? completedDays / daysElapsed : 0;
+
+    setWeekDataMap((prev) => ({
+      ...prev,
+      [habitId]: {
+        ...data,
+        completedToday: nextCompletedToday,
+        dots: nextDots,
+        completionPct: nextCompletionPct,
+      },
+    }));
+    setPendingToggleIds((prev) => ({ ...prev, [habitId]: true }));
+
+    try {
+      if (data.completedToday) {
+        await unmarkHabitComplete(habitId);
+      } else {
+        await markHabitComplete(habitId);
+      }
+    } catch {
+      setWeekDataMap((prev) => ({ ...prev, [habitId]: data }));
+    } finally {
+      setPendingToggleIds((prev) => {
+        const next = { ...prev };
+        delete next[habitId];
+        return next;
+      });
+      void loadData();
+    }
   };
 
   const filteredHabits = habits.filter((habit) => {
@@ -342,6 +391,7 @@ export default function HabitListScreen() {
                 weekData={weekDataMap[habit.id] || { dots: [false,false,false,false,false,false,false], completionPct: 0, bestStreak: 0, streak: 0, completedToday: false }}
                 onPress={() => router.push(`/(tabs)/habits/detail?id=${habit.id}` as any)}
                 onToggle={() => handleToggle(habit.id)}
+                disabled={Boolean(pendingToggleIds[habit.id])}
               />
             ))}
             {filteredHabits.length === 0 && (

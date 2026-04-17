@@ -50,6 +50,91 @@ async function removeTodayCompletionInCloud(uid: string, db: Firestore, habitId:
   }
 }
 
+let isRefreshingHabits = false;
+
+function runInBackground(task: () => Promise<void>): void {
+  void task().catch(() => {
+    // Best effort only; local data is the source of truth for UX responsiveness.
+  });
+}
+
+function queueOrPushHabitInBackground(habit: Habit): void {
+  runInBackground(async () => {
+    const context = await getCloudContext();
+    if (!context) {
+      await enqueueSyncItem('habits', 'setHabit', habit);
+      return;
+    }
+
+    try {
+      await setHabitInCloud(context.uid, context.db, habit);
+      await flushHabitQueue();
+    } catch {
+      await enqueueSyncItem('habits', 'setHabit', habit);
+    }
+  });
+}
+
+function queueOrDeleteHabitInBackground(id: string): void {
+  runInBackground(async () => {
+    const context = await getCloudContext();
+    if (!context) {
+      await enqueueSyncItem('habits', 'deleteHabit', id);
+      return;
+    }
+
+    try {
+      await deleteHabitInCloud(context.uid, context.db, id);
+      await flushHabitQueue();
+    } catch {
+      await enqueueSyncItem('habits', 'deleteHabit', id);
+    }
+  });
+}
+
+function queueOrPushCompletionInBackground(completion: HabitCompletion): void {
+  runInBackground(async () => {
+    await syncCompletionToCloud(completion);
+  });
+}
+
+function queueOrRemoveCompletionInBackground(habitId: string): void {
+  runInBackground(async () => {
+    const context = await getCloudContext();
+    if (!context) {
+      await enqueueSyncItem('habits', 'removeTodayCompletion', habitId);
+      return;
+    }
+
+    try {
+      await removeTodayCompletionInCloud(context.uid, context.db, habitId);
+      await flushHabitQueue();
+    } catch {
+      await enqueueSyncItem('habits', 'removeTodayCompletion', habitId);
+    }
+  });
+}
+
+function refreshHabitsFromCloudInBackground(): void {
+  if (isRefreshingHabits) return;
+  isRefreshingHabits = true;
+
+  runInBackground(async () => {
+    try {
+      const context = await getCloudContext();
+      if (!context) return;
+
+      await flushHabitQueue();
+      const q = query(collection(context.db, habitsPath(context.uid)), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      const habits = snap.docs.map((d) => d.data() as Habit);
+      await habitLocalRepository.saveHabits(habits);
+    } finally {
+      isRefreshingHabits = false;
+    }
+  });
+}
+
 export async function flushHabitQueue(): Promise<void> {
   await flushSyncQueue('habits', async (item) => {
     const context = await getCloudContext();
@@ -93,15 +178,9 @@ async function syncCompletionToCloud(completion: HabitCompletion): Promise<void>
 
 export const habitFirebaseRepository: HabitRepository = {
   async getAllHabits() {
-    const context = await getCloudContext();
-    if (!context) return habitLocalRepository.getAllHabits();
-
-    await flushHabitQueue();
-    const q = query(collection(context.db, habitsPath(context.uid)), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    const habits = snap.docs.map((d) => d.data() as Habit);
-    await habitLocalRepository.saveHabits(habits);
-    return habits;
+    const localHabits = await habitLocalRepository.getAllHabits();
+    refreshHabitsFromCloudInBackground();
+    return localHabits;
   },
 
   async getHabitById(id) {
@@ -111,22 +190,9 @@ export const habitFirebaseRepository: HabitRepository = {
 
   async saveHabits(habits) {
     await habitLocalRepository.saveHabits(habits);
-    const context = await getCloudContext();
-    if (!context) {
-      for (const habit of habits) {
-        await enqueueSyncItem('habits', 'setHabit', habit);
-      }
-      return;
-    }
-
     for (const habit of habits) {
-      try {
-        await setHabitInCloud(context.uid, context.db, habit);
-      } catch {
-        await enqueueSyncItem('habits', 'setHabit', habit);
-      }
+      queueOrPushHabitInBackground(habit);
     }
-    await flushHabitQueue();
   },
 
   async addHabit(data) {
@@ -135,17 +201,7 @@ export const habitFirebaseRepository: HabitRepository = {
     const latest = await habitLocalRepository.getAllHabits();
     const added = latest.find((h) => !previousIds.has(h.id));
     if (added) {
-      const context = await getCloudContext();
-      if (!context) {
-        await enqueueSyncItem('habits', 'setHabit', added);
-      } else {
-        try {
-          await setHabitInCloud(context.uid, context.db, added);
-          await flushHabitQueue();
-        } catch {
-          await enqueueSyncItem('habits', 'setHabit', added);
-        }
-      }
+      queueOrPushHabitInBackground(added);
     }
     return listResult;
   },
@@ -153,57 +209,17 @@ export const habitFirebaseRepository: HabitRepository = {
   async updateHabit(id, updates) {
     const updated = await habitLocalRepository.updateHabit(id, updates);
     if (!updated) return null;
-    const context = await getCloudContext();
-    if (!context) {
-      await enqueueSyncItem('habits', 'setHabit', updated);
-      return updated;
-    }
-
-    try {
-      await setHabitInCloud(context.uid, context.db, updated);
-      await flushHabitQueue();
-    } catch {
-      await enqueueSyncItem('habits', 'setHabit', updated);
-    }
+    queueOrPushHabitInBackground(updated);
     return updated;
   },
 
   async deleteHabit(id) {
     await habitLocalRepository.deleteHabit(id);
-    const context = await getCloudContext();
-    if (!context) {
-      await enqueueSyncItem('habits', 'deleteHabit', id);
-      return;
-    }
-
-    try {
-      await deleteHabitInCloud(context.uid, context.db, id);
-      await flushHabitQueue();
-    } catch {
-      await enqueueSyncItem('habits', 'deleteHabit', id);
-    }
+    queueOrDeleteHabitInBackground(id);
   },
 
   async getCompletionsForHabit(habitId) {
-    const context = await getCloudContext();
-    if (!context) return habitLocalRepository.getCompletionsForHabit(habitId);
-
-    await flushHabitQueue();
-    const q = query(collection(context.db, completionsPath(context.uid, habitId)), orderBy('completedDate', 'desc'));
-    const snap = await getDocs(q);
-    const completions = snap.docs.map((d) => d.data() as HabitCompletion);
-
-    const allHabits = await this.getAllHabits();
-    const allCompletions: HabitCompletion[] = [];
-    for (const habit of allHabits) {
-      if (habit.id === habitId) {
-        allCompletions.push(...completions);
-      } else {
-        allCompletions.push(...(await habitLocalRepository.getCompletionsForHabit(habit.id)));
-      }
-    }
-    await habitLocalRepository.saveCompletions(allCompletions);
-    return completions;
+    return habitLocalRepository.getCompletionsForHabit(habitId);
   },
 
   async getTodayCompletionsForHabit(habitId) {
@@ -213,29 +229,18 @@ export const habitFirebaseRepository: HabitRepository = {
   async saveCompletions(completions) {
     await habitLocalRepository.saveCompletions(completions);
     for (const completion of completions) {
-      await syncCompletionToCloud(completion);
+      queueOrPushCompletionInBackground(completion);
     }
   },
 
   async markHabitComplete(habitId) {
     const completion = await habitLocalRepository.markHabitComplete(habitId);
-    await syncCompletionToCloud(completion);
+    queueOrPushCompletionInBackground(completion);
     return completion;
   },
 
   async unmarkHabitComplete(habitId) {
     await habitLocalRepository.unmarkHabitComplete(habitId);
-    const context = await getCloudContext();
-    if (!context) {
-      await enqueueSyncItem('habits', 'removeTodayCompletion', habitId);
-      return;
-    }
-
-    try {
-      await removeTodayCompletionInCloud(context.uid, context.db, habitId);
-      await flushHabitQueue();
-    } catch {
-      await enqueueSyncItem('habits', 'removeTodayCompletion', habitId);
-    }
+    queueOrRemoveCompletionInBackground(habitId);
   },
 };
