@@ -1,8 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Auth, Persistence, User, UserCredential } from 'firebase/auth';
-import * as FirebaseAuth from 'firebase/auth';
-import { Platform } from 'react-native';
-import { getFirebaseApp } from './app';
+// services/firebase/auth.ts
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FirebaseAuth from "firebase/auth";
+import { Auth, Persistence, User, UserCredential } from "firebase/auth";
+import { Platform } from "react-native";
+import { getFirebaseApp } from "./app";
 
 let authInstance: Auth | null = null;
 let bootstrapPromise: Promise<User | null> | null = null;
@@ -20,15 +21,19 @@ export function getFirebaseAuth(): Auth | null {
   const app = getFirebaseApp();
   if (!app) return null;
 
-  if (Platform.OS === 'web') {
+  if (Platform.OS === "web") {
     authInstance = FirebaseAuth.getAuth(app);
     return authInstance;
   }
 
   try {
-    const getReactNativePersistence = (FirebaseAuth as unknown as {
-      getReactNativePersistence?: (storage: typeof AsyncStorage) => Persistence;
-    }).getReactNativePersistence;
+    const getReactNativePersistence = (
+      FirebaseAuth as unknown as {
+        getReactNativePersistence?: (
+          storage: typeof AsyncStorage,
+        ) => Persistence;
+      }
+    ).getReactNativePersistence;
 
     if (getReactNativePersistence) {
       authInstance = FirebaseAuth.initializeAuth(app, {
@@ -56,16 +61,19 @@ export async function ensureAnonymousAuth(): Promise<User | null> {
       .then((cred: UserCredential) => cred.user)
       .catch((error: unknown) => {
         const code = (error as { code?: string })?.code;
-        if (code === 'auth/admin-restricted-operation') {
+        if (code === "auth/admin-restricted-operation") {
           authUnavailable = true;
           logAuthUnavailable(
-            '[firebase] Anonymous auth is disabled for this Firebase project. Enable Anonymous provider in Firebase Console > Authentication > Sign-in method. Falling back to local-only mode.',
+            "[firebase] Anonymous auth is disabled for this Firebase project. Enable Anonymous provider in Firebase Console > Authentication > Sign-in method. Falling back to local-only mode.",
             error,
           );
           return null;
         }
 
-        logAuthUnavailable('[firebase] Anonymous auth failed. Falling back to local-only mode.', error);
+        logAuthUnavailable(
+          "[firebase] Anonymous auth failed. Falling back to local-only mode.",
+          error,
+        );
         return null;
       })
       .finally(() => {
@@ -76,13 +84,20 @@ export async function ensureAnonymousAuth(): Promise<User | null> {
   return bootstrapPromise;
 }
 
-export async function signInWithEmailPassword(email: string, password: string): Promise<User> {
+export async function signInWithEmailPassword(
+  email: string,
+  password: string,
+): Promise<User> {
   const auth = getFirebaseAuth();
   if (!auth) {
-    throw new Error('Firebase auth is not configured.');
+    throw new Error("Firebase auth is not configured.");
   }
 
-  const credential = await FirebaseAuth.signInWithEmailAndPassword(auth, email, password);
+  const credential = await FirebaseAuth.signInWithEmailAndPassword(
+    auth,
+    email,
+    password,
+  );
   return credential.user;
 }
 
@@ -93,12 +108,18 @@ export async function createAccountWithEmailPassword(
 ): Promise<User> {
   const auth = getFirebaseAuth();
   if (!auth) {
-    throw new Error('Firebase auth is not configured.');
+    throw new Error("Firebase auth is not configured.");
   }
 
-  const credential = await FirebaseAuth.createUserWithEmailAndPassword(auth, email, password);
+  const credential = await FirebaseAuth.createUserWithEmailAndPassword(
+    auth,
+    email,
+    password,
+  );
   if (displayName?.trim()) {
-    await FirebaseAuth.updateProfile(credential.user, { displayName: displayName.trim() });
+    await FirebaseAuth.updateProfile(credential.user, {
+      displayName: displayName.trim(),
+    });
   }
   return credential.user;
 }
@@ -112,7 +133,7 @@ export async function signOutCurrentUser(): Promise<void> {
 export async function signInWithGoogleIdToken(idToken: string): Promise<User> {
   const auth = getFirebaseAuth();
   if (!auth) {
-    throw new Error('Firebase auth is not configured.');
+    throw new Error("Firebase auth is not configured.");
   }
 
   const credential = FirebaseAuth.GoogleAuthProvider.credential(idToken);

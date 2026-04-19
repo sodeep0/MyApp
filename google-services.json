@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "936139356062",
+    "project_id": "productivity-app-97fc1",
+    "storage_bucket": "productivity-app-97fc1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:936139356062:android:f0d4fdaf2921beeecd888f",
+        "android_client_info": {
+          "package_name": "com.anonymous21.myapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "936139356062-51n47rt162m773qmi2p6421po9850ovc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anonymous21.myapp",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "936139356062-uf64iuj7fu10pcbsk7454boprepv088p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anonymous21.myapp",
+            "certificate_hash": "0cfb0d32959fa6f7b7f4ce3e12e203357105d1ae"
+          }
+        },
+        {
+          "client_id": "936139356062-lp4bso58trco5ks5mgk0br2cqitb24ad.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB1uNTuWcvmDm_vuoq3IUM_5vyGPUjCzng"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "936139356062-lp4bso58trco5ks5mgk0br2cqitb24ad.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
