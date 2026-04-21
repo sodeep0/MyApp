@@ -12,12 +12,14 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { CommonStyles } from '@/constants/commonStyles';
+import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useAuthSession } from '@/hooks/useAuthSession';
 import { useSubscription } from '@/hooks/useSubscription';
 import { signOutCurrentUser } from '@/services/firebase/auth';
+import { getDisplayName, updateDisplayName } from '@/stores/userStore';
 
 const SETTINGS_SECTIONS = [
   {
@@ -89,12 +91,38 @@ const GUEST_APP_INFO = [
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [displayName, setDisplayName] = useLocalStorage('kaarma_display_name', 'User');
-  const [email, setEmail] = useLocalStorage('kaarma_user_email', 'user@kaarma.app');
-  const [isLoggedIn, setIsLoggedIn] = useLocalStorage('kaarma_logged_in', false);
+  const { isAuthenticated, email: authEmail, displayName: authDisplayName } = useAuthSession();
   const { isPremium } = useSubscription();
+  const [displayName, setDisplayName] = useState('User');
   const [editingName, setEditingName] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isMounted = true;
+
+      const loadProfileState = async () => {
+        const storedName = await getDisplayName();
+        if (!isMounted) return;
+
+        if (storedName && storedName !== 'User') {
+          setDisplayName(storedName);
+          return;
+        }
+
+        if (authDisplayName?.trim()) {
+          setDisplayName(authDisplayName.trim());
+        }
+      };
+
+      loadProfileState();
+
+      return () => {
+        isMounted = false;
+        setEditingName(false);
+      };
+    }, [authDisplayName]),
+  );
 
   const handleLogOut = async () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -105,21 +133,24 @@ export default function ProfileScreen() {
         onPress: async () => {
           setEditingName(false);
           await signOutCurrentUser();
-          await setIsLoggedIn(false);
-          await setEmail('user@kaarma.app');
           router.replace('/profile' as any);
         },
       },
     ]);
   };
 
-  useFocusEffect(
-    React.useCallback(() => {
-      return () => {
-        setEditingName(false);
-      };
-    }, []),
-  );
+  const handleDisplayNameChange = (nextName: string) => {
+    setDisplayName(nextName);
+  };
+
+  const persistDisplayName = async () => {
+    const trimmed = displayName.trim();
+    const nextName = trimmed || authDisplayName || 'User';
+    setDisplayName(nextName);
+    await updateDisplayName(nextName);
+  };
+
+  const email = authEmail ?? 'user@kaarma.app';
 
   return (
     <View style={styles.container}>
@@ -134,7 +165,7 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {!isLoggedIn ? (
+        {!isAuthenticated ? (
           <>
             <View style={styles.guestHeroCard}>
               <View style={styles.guestIconWrap}>
@@ -228,22 +259,28 @@ export default function ProfileScreen() {
                   {editingName ? (
                     <TextInput
                       style={styles.nameInput}
-                      value={displayName as string}
-                      onChangeText={setDisplayName}
-                      onBlur={() => setEditingName(false)}
+                      value={displayName}
+                      onChangeText={handleDisplayNameChange}
+                      onBlur={async () => {
+                        await persistDisplayName();
+                        setEditingName(false);
+                      }}
                       autoFocus
-                      onSubmitEditing={() => setEditingName(false)}
+                      onSubmitEditing={async () => {
+                        await persistDisplayName();
+                        setEditingName(false);
+                      }}
                     />
                   ) : (
                     <Pressable onPress={() => setEditingName(true)}>
-                      <Text style={styles.displayName}>{String(displayName)}</Text>
+                      <Text style={styles.displayName}>{displayName}</Text>
                     </Pressable>
                   )}
                   <Pressable onPress={() => setEditingName(true)} style={styles.editBtn}>
                     <Ionicons name="pencil" size={14} color={Colors.TextSecondary} />
                   </Pressable>
                 </View>
-                <Text style={styles.email}>{String(email)}</Text>
+                <Text style={styles.email}>{email}</Text>
                 {isPremium ? (
                   <View style={styles.premiumBadge}>
                     <Ionicons name="diamond" size={10} color={Colors.Surface} />
@@ -318,8 +355,7 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   headerBar: {
     flexDirection: 'row',
@@ -494,57 +530,35 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   sectionTitle: {
-    ...Typography.SectionLabel,
-    color: Colors.TextSecondary,
-    textTransform: 'uppercase',
+    ...CommonStyles.sectionLabel,
     letterSpacing: 0.8,
-    marginBottom: Spacing.sm,
     marginLeft: Spacing.xs,
   },
   sectionCard: {
-    backgroundColor: Colors.Surface,
-    borderRadius: Shapes.Card,
-    borderWidth: 1,
-    borderColor: Colors.BorderSubtle,
+    ...CommonStyles.surfaceCardFlat,
     overflow: 'hidden',
   },
   sectionCardLoggedIn: {
-    backgroundColor: Colors.Surface,
-    borderRadius: Shapes.Card,
-    borderWidth: 1,
-    borderColor: Colors.BorderSubtle,
+    ...CommonStyles.surfaceCard,
     overflow: 'hidden',
-    ...Shadows.Card,
   },
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
+    ...CommonStyles.settingsMenuItem,
   },
   menuItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.BorderSubtle + '80',
+    ...CommonStyles.settingsMenuItemBorder,
   },
   menuIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: Shapes.IconBg,
-    justifyContent: 'center',
-    alignItems: 'center',
+    ...CommonStyles.settingsMenuIcon,
   },
   menuLabel: {
-    ...Typography.Body1,
-    color: Colors.TextPrimary,
-    flex: 1,
+    ...CommonStyles.settingsMenuLabel,
   },
   menuLabelDanger: {
     color: Colors.Danger,
   },
   trailingValue: {
-    ...Typography.Body2,
-    color: Colors.TextSecondary,
+    ...CommonStyles.settingsTrailingValue,
   },
   logoutButton: {
     marginTop: Spacing.xs,

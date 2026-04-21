@@ -10,7 +10,11 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
+import { CommonStyles } from '@/constants/commonStyles';
+import { getCountLimitedFeatureGate } from '@/constants/featureLimits';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { useSubscription } from '@/hooks/useSubscription';
 import { safeBack } from '@/navigation/safeBack';
 import { getAllJournalEntries } from '@/stores/journalStore';
 import type { JournalEntry } from '@/types/models';
@@ -42,6 +46,7 @@ const MOOD_COLORS: string[] = [
 export default function JournalListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isPremium } = useSubscription();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,6 +72,17 @@ export default function JournalListScreen() {
         );
       })
     : entries;
+
+  const journalGate = getCountLimitedFeatureGate('journalEntries', isPremium, entries.length);
+
+  const handleCreateEntry = () => {
+    if (journalGate.locked) {
+      router.push('/premium' as any);
+      return;
+    }
+
+    router.push('/track/journal-entry' as any);
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -127,7 +143,7 @@ export default function JournalListScreen() {
             <Text style={styles.emptySub}>Start writing to track your mood and thoughts</Text>
             <Pressable
               style={({ pressed }) => [styles.emptyCta, { transform: [{ scale: pressed ? 0.98 : 1 }] }]}
-              onPress={() => router.push('/track/journal-entry' as any)}
+              onPress={handleCreateEntry}
             >
               <Ionicons name="create-outline" size={18} color={Colors.Surface} />
               <Text style={styles.emptyCtaText}>Write First Entry</Text>
@@ -201,6 +217,15 @@ export default function JournalListScreen() {
             );
           })
         )}
+
+        {journalGate.locked && (
+          <View style={styles.premiumBannerWrap}>
+            <PremiumLockedBanner
+              featureName={journalGate.featureName}
+              onUpgrade={() => router.push('/premium' as any)}
+            />
+          </View>
+        )}
       </ScrollView>
 
       <Pressable
@@ -212,7 +237,7 @@ export default function JournalListScreen() {
           },
           { transform: [{ scale: pressed ? 0.94 : 1 }] },
         ]}
-        onPress={() => router.push('/track/journal-entry' as any)}
+        onPress={handleCreateEntry}
       >
         <Ionicons name="add" size={28} color={Colors.Surface} />
       </Pressable>
@@ -222,41 +247,22 @@ export default function JournalListScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    gap: Spacing.sm,
+    ...CommonStyles.stackHeader,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Shapes.IconBg,
-    backgroundColor: Colors.WarmSand + '60',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
+    ...CommonStyles.stackHeaderButton,
   },
   headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 8,
+    ...CommonStyles.stackHeaderCenter,
   },
   headerTitle: {
-    ...Typography.Headline1,
-    color: Colors.TextPrimary,
-    fontWeight: '700',
+    ...CommonStyles.stackHeaderTitle,
   },
   headerSubtitle: {
-    ...Typography.Body2,
-    color: Colors.TextSecondary,
-    marginTop: 2,
+    ...CommonStyles.stackHeaderSubtitle,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -315,18 +321,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   emptyState: {
-    alignItems: 'center',
+    ...CommonStyles.emptyStateCentered,
     paddingVertical: Spacing.xxl,
-    gap: Spacing.sm,
   },
   emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    ...CommonStyles.emptyIconCircleMd,
     backgroundColor: Colors.SoftSky + '20',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
   },
   emptyTitle: {
     ...Typography.Headline2,
@@ -354,13 +354,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   entryCard: {
-    backgroundColor: Colors.Surface,
-    borderRadius: Shapes.Card,
-    borderWidth: 1,
-    borderColor: Colors.BorderSubtle,
+    ...CommonStyles.surfaceCard,
     marginBottom: Spacing.sm,
     overflow: 'hidden',
-    ...Shadows.Card,
+  },
+  premiumBannerWrap: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   entryCardInner: {
     flexDirection: 'row',
@@ -422,13 +422,7 @@ const styles = StyleSheet.create({
     color: Colors.TextSecondary,
   },
   fab: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    ...CommonStyles.fabBase,
     backgroundColor: Colors.SteelBlue,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.FAB,
   },
 });

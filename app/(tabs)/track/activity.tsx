@@ -9,7 +9,9 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { CommonStyles } from '@/constants/commonStyles';
+import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
+import { canEditActivityLog } from '@/constants/featureLimits';
 import { safeBack } from '@/navigation/safeBack';
 import { Card } from '@/components/Card';
 import { getAllActivities, getWeeklySummary, getFrequentActivityNames } from '@/stores/activityStore';
@@ -93,7 +95,6 @@ export default function ActivityLogScreen() {
           <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, textAlign: 'center', paddingVertical: Spacing.xxl }}>Loading...</Text>
         ) : (
           <>
-            {/* Weekly Summary */}
             <Card style={styles.summaryCard}>
               <View style={styles.summaryHeader}>
                 <Ionicons name="bar-chart" size={20} color={Colors.SteelBlue} />
@@ -102,7 +103,6 @@ export default function ActivityLogScreen() {
               <Text style={styles.summaryValue}>{formatDuration(weeklySummary.totalMinutes)}</Text>
               <Text style={styles.summarySub}>total logged this week</Text>
 
-              {/* Bar Chart */}
               {weeklySummary.byDay && (
                 <View style={styles.barChart}>
                   {DAY_LABELS.map((day, i) => {
@@ -127,7 +127,7 @@ export default function ActivityLogScreen() {
                     {(() => {
                       const sorted = Object.entries(weeklySummary.byCategory).sort((a, b) => b[1] - a[1]);
                       return sorted.map(([cat, mins]) => (
-                        <View key={cat} style={[styles.breakdownSegment, { flex: Math.max(1, Math.round(mins / 10)), backgroundColor: (CATEGORY_CONFIG[cat]?.color || Colors.DustyTaupe) }]} />
+                        <View key={cat} style={[styles.breakdownSegment, { flex: Math.max(1, Math.round(mins / 10)), backgroundColor: CATEGORY_CONFIG[cat]?.color || Colors.DustyTaupe }]} />
                       ));
                     })()}
                   </View>
@@ -145,7 +145,6 @@ export default function ActivityLogScreen() {
               )}
             </Card>
 
-            {/* Quick Log */}
             {quickLogs.length > 0 && (
               <View style={styles.quickLogSection}>
                 <Text style={styles.sectionLabel}>QUICK LOG</Text>
@@ -164,7 +163,6 @@ export default function ActivityLogScreen() {
               </View>
             )}
 
-            {/* Recent */}
             <Text style={styles.sectionLabel}>RECENT</Text>
             {activities.length === 0 && (
               <View style={styles.emptyState}>
@@ -176,6 +174,7 @@ export default function ActivityLogScreen() {
               </View>
             )}
             {activities.slice(0, 15).map((activity) => {
+              const isEditable = canEditActivityLog(activity.loggedAt);
               const dateLabel = (() => {
                 const today = new Date();
                 const activityDate = new Date(activity.date);
@@ -195,14 +194,20 @@ export default function ActivityLogScreen() {
                   onPress={() => router.push(`/track/log-activity?id=${activity.id}` as any)}
                 >
                   <View style={styles.logRow}>
-                    <View style={[styles.logIconCircle, { backgroundColor: catConfig.color + '18' }]}>
+                    <View style={[styles.logIconCircle, { backgroundColor: `${catConfig.color}18` }]}>
                       <Ionicons name={catConfig.icon} size={20} color={catConfig.color} />
                     </View>
                     <View style={styles.logInfo}>
                       <Text style={styles.logName} numberOfLines={1}>{activity.name}</Text>
-                      <Text style={styles.logMeta}>{dateLabel} · {activity.durationMinutes} min</Text>
+                      <Text style={styles.logMeta}>
+                        {dateLabel} - {activity.durationMinutes} min{isEditable ? '' : ' - Edit window closed'}
+                      </Text>
                     </View>
-                    <Ionicons name="create-outline" size={18} color={Colors.DustyTaupe} />
+                    <Ionicons
+                      name={isEditable ? 'create-outline' : 'lock-closed-outline'}
+                      size={18}
+                      color={isEditable ? Colors.DustyTaupe : Colors.Warning}
+                    />
                   </View>
                 </Pressable>
               );
@@ -230,41 +235,22 @@ export default function ActivityLogScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    gap: Spacing.sm,
+    ...CommonStyles.stackHeader,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Shapes.IconBg,
-    backgroundColor: Colors.WarmSand + '60',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
+    ...CommonStyles.stackHeaderButton,
   },
   headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 8,
+    ...CommonStyles.stackHeaderCenter,
   },
   headerTitle: {
-    ...Typography.Headline1,
-    color: Colors.TextPrimary,
-    fontWeight: '700',
+    ...CommonStyles.stackHeaderTitle,
   },
   headerSubtitle: {
-    ...Typography.Body2,
-    color: Colors.TextSecondary,
-    marginTop: 2,
+    ...CommonStyles.stackHeaderSubtitle,
   },
   scrollContent: {
     padding: Spacing.md,
@@ -356,11 +342,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   sectionLabel: {
-    ...Typography.Caption,
-    color: Colors.TextSecondary,
+    ...CommonStyles.sectionLabel,
     fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: Spacing.sm,
   },
   quickLogRow: {
     flexDirection: 'row',
@@ -382,13 +365,9 @@ const styles = StyleSheet.create({
     color: Colors.TextPrimary,
   },
   logCard: {
-    backgroundColor: Colors.Surface,
-    borderRadius: Shapes.Card,
-    borderWidth: 1,
-    borderColor: Colors.BorderSubtle,
+    ...CommonStyles.surfaceCard,
     padding: Spacing.md,
     marginBottom: Spacing.sm,
-    ...Shadows.Card,
   },
   logRow: {
     flexDirection: 'row',
@@ -417,18 +396,11 @@ const styles = StyleSheet.create({
     color: Colors.TextSecondary,
   },
   emptyState: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    gap: Spacing.sm,
+    ...CommonStyles.emptyStateCentered,
   },
   emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    ...CommonStyles.emptyIconCircleMd,
     backgroundColor: Colors.SurfaceContainerHigh,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
   },
   emptyTitle: {
     ...Typography.Body1,
@@ -440,13 +412,7 @@ const styles = StyleSheet.create({
     color: Colors.TextSecondary,
   },
   fab: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    ...CommonStyles.fabBase,
     backgroundColor: Colors.SteelBlue,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.FAB,
   },
 });

@@ -19,11 +19,25 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
 import React, { useEffect } from "react";
+import { Text, TextInput } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 SplashScreen.preventAutoHideAsync();
 console.log("🔵 Root layout module loaded");
 WebBrowser.maybeCompleteAuthSession(); // ✅ module level
+
+const DefaultText = Text as typeof Text & {
+  defaultProps?: React.ComponentProps<typeof Text>;
+};
+const DefaultTextInput = TextInput as typeof TextInput & {
+  defaultProps?: React.ComponentProps<typeof TextInput>;
+};
+
+DefaultText.defaultProps = DefaultText.defaultProps ?? {};
+DefaultText.defaultProps.allowFontScaling = false;
+
+DefaultTextInput.defaultProps = DefaultTextInput.defaultProps ?? {};
+DefaultTextInput.defaultProps.allowFontScaling = false;
 
 export default function RootLayout() {
   const flushPendingSync = async () => {

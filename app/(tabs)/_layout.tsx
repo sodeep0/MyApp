@@ -92,6 +92,11 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
                     color={isActive ? Colors.SteelBlue : Colors.DustyTaupe}
                   />
                   <Text
+                    allowFontScaling={false}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                    ellipsizeMode="clip"
+                    numberOfLines={1}
                     style={[styles.tabLabel, isActive && styles.tabLabelActive]}
                   >
                     {tab.label}
@@ -140,11 +145,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   bar: {
-    width: "80%",
+    width: "96%",
+    maxWidth: 460,
     flexDirection: "row",
     backgroundColor: Colors.Surface,
     borderRadius: Shapes.BottomNav + 8,
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: 2,
     paddingVertical: Spacing.sm,
     alignItems: "center",
     justifyContent: "space-between",
@@ -154,14 +160,16 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     flex: 1,
+    minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
   },
   tabInner: {
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
     paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: 2,
     borderRadius: Shapes.Chip,
     position: "relative",
   },
@@ -177,15 +185,22 @@ const styles = StyleSheet.create({
   tabContent: {
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
+    minWidth: 0,
     gap: 2,
     zIndex: 1,
   },
   tabLabel: {
-    fontSize: 10,
+    width: "100%",
+    fontSize: 9,
     fontWeight: "500" as const,
     fontFamily: "Inter-Medium",
-    lineHeight: 14,
+    lineHeight: 12,
     color: Colors.DustyTaupe,
+    textAlign: "center",
+    flexShrink: 1,
+    includeFontPadding: false,
+    letterSpacing: -0.1,
   },
   tabLabelActive: {
     color: Colors.SteelBlue,

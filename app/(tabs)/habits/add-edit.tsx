@@ -1,4 +1,5 @@
 import { Button } from "@/components/Button";
+import { CommonStyles } from "@/constants/commonStyles";
 import { Colors, Shapes, Spacing, Typography } from "@/constants/theme";
 import { safeBack } from "@/navigation/safeBack";
 import { addHabit, getHabitById, updateHabit } from "@/stores/habitStore";
@@ -466,8 +467,7 @@ export default function AddEditHabitScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
     flexDirection: "row",
@@ -488,37 +488,21 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.md,
   },
   sectionTitle: {
-    ...Typography.SectionLabel,
-    color: Colors.TextSecondary,
-    textTransform: "uppercase" as const,
+    ...CommonStyles.sectionLabel,
     letterSpacing: 0.8,
-    marginBottom: Spacing.sm,
     marginTop: Spacing.lg,
   },
   inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 52,
-    backgroundColor: Colors.Background,
-    borderColor: Colors.DustyTaupe,
-    borderWidth: 1,
-    borderRadius: Shapes.Input,
-    paddingHorizontal: Spacing.md,
+    ...CommonStyles.inputWrapper,
   },
   inputIcon: {
-    marginRight: Spacing.sm,
+    ...CommonStyles.inputIcon,
   },
   input: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    ...Typography.Body1,
-    color: Colors.TextPrimary,
+    ...CommonStyles.input,
   },
   charCount: {
-    ...Typography.Micro,
-    color: Colors.TextSecondary,
-    textAlign: "right",
-    marginTop: 4,
+    ...CommonStyles.charCount,
   },
   iconRow: {
     flexDirection: "row",
@@ -547,7 +531,10 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: Spacing.md,
+    alignSelf: "flex-start",
+    minWidth: 74,
+    justifyContent: "center",
+    paddingHorizontal: Spacing.md + 2,
     paddingVertical: Spacing.sm + 2,
     borderRadius: Shapes.Chip,
     backgroundColor: Colors.WarmSand,
@@ -558,13 +545,13 @@ const styles = StyleSheet.create({
   chipText: {
     ...Typography.Caption,
     color: Colors.TextPrimary,
-    fontFamily: "Inter-SemiBold",
-    letterSpacing: 0.5,
+    fontWeight: "600",
+    letterSpacing: 0.2,
     lineHeight: 20,
   },
   chipTextActive: {
     color: Colors.TextPrimary,
-    fontFamily: "Inter-Bold",
+    fontWeight: "700",
   },
   chipIcon: {
     marginRight: 4,
@@ -673,10 +660,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   ctaContainer: {
-    paddingHorizontal: Spacing.screenH,
+    ...CommonStyles.ctaContainer,
     paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.BorderSubtle,
-    backgroundColor: Colors.Surface,
   },
 });

@@ -18,6 +18,13 @@ async function getAllCompletions(): Promise<HabitCompletion[]> {
   return (await storage.getItem<HabitCompletion[]>(COMPLETIONS_KEY)) ?? [];
 }
 
+export async function clearHabitLocalCache(): Promise<void> {
+  await Promise.all([
+    storage.removeItem(HABITS_KEY),
+    storage.removeItem(COMPLETIONS_KEY),
+  ]);
+}
+
 export const habitLocalRepository: HabitRepository = {
   async getAllHabits() {
     return (await storage.getItem<Habit[]>(HABITS_KEY)) ?? [];

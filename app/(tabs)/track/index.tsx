@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { CommonStyles } from '@/constants/commonStyles';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
 import { getAllUrgeEvents, getAllBadHabits } from '@/stores/badHabitStore';
 import { getAllActivities } from '@/stores/activityStore';
@@ -118,7 +119,7 @@ export default function TrackHubScreen() {
       id: `ac-${activity.id}`,
       type: 'ACTIVITY',
       title: activity.name,
-      subtitle: `${activity.durationMinutes} min · ${activity.category.toLowerCase()}`,
+      subtitle: `${activity.durationMinutes} min - ${activity.category.toLowerCase()}`,
       timestamp: activity.loggedAt,
       route: `/track/log-activity?id=${activity.id}`,
     }));
@@ -215,7 +216,7 @@ export default function TrackHubScreen() {
                         {item.title}
                       </Text>
                       <Text style={styles.recentItemSubtitle} numberOfLines={1}>
-                        {meta.label} · {item.subtitle}
+                        {meta.label} - {item.subtitle}
                       </Text>
                     </View>
                     <Text style={styles.recentTime}>{formatRecentTime(item.timestamp)}</Text>
@@ -239,32 +240,23 @@ export default function TrackHubScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
-    flexDirection: 'row',
+    ...CommonStyles.listHeader,
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
   },
   headerLeft: {
-    flex: 1,
+    ...CommonStyles.listHeaderLeft,
   },
   headerBtn: {
     padding: Spacing.sm,
   },
   title: {
-    ...Typography.Headline1,
-    color: Colors.TextPrimary,
-    fontWeight: '700',
+    ...CommonStyles.listHeaderTitle,
   },
   subtitle: {
-    ...Typography.Body2,
-    color: Colors.TextSecondary,
-    marginTop: 2,
+    ...CommonStyles.listHeaderSubtitle,
   },
   scrollContent: {
     paddingBottom: Spacing.xl,
@@ -322,7 +314,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
-    backgroundColor: Colors.WarmSand + '60',
+    backgroundColor: `${Colors.WarmSand}60`,
     borderRadius: Shapes.Chip,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
@@ -338,10 +330,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenH,
   },
   recentTitle: {
-    ...Typography.Caption,
-    color: Colors.TextSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    ...CommonStyles.sectionLabel,
     marginBottom: Spacing.sm,
     fontWeight: '700',
   },

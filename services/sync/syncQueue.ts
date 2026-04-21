@@ -24,6 +24,17 @@ async function saveQueue(items: SyncQueueItem[]): Promise<void> {
   await storage.setItem(SYNC_QUEUE_KEY, items);
 }
 
+export async function clearSyncQueue(modules?: SyncModule[]): Promise<void> {
+  if (!modules || modules.length === 0) {
+    await storage.removeItem(SYNC_QUEUE_KEY);
+    return;
+  }
+
+  const scopedModules = new Set(modules);
+  const queue = await getQueue();
+  await saveQueue(queue.filter((item) => !scopedModules.has(item.module)));
+}
+
 export async function enqueueSyncItem(
   module: SyncModule,
   action: string,

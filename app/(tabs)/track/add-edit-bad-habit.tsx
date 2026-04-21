@@ -11,9 +11,17 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { CommonStyles } from '@/constants/commonStyles';
+import { useCountLimitedFeatureGate } from '@/hooks/useFeatureGate';
 import { safeBack } from '@/navigation/safeBack';
-import { addBadHabit, updateBadHabit, getBadHabitById } from '@/stores/badHabitStore';
+import {
+  addBadHabit,
+  countActiveBadHabits,
+  getBadHabitById,
+  updateBadHabit,
+} from '@/stores/badHabitStore';
 import { BadHabitCategory, BadHabitSeverity } from '@/types/models';
 
 const CATEGORIES = [
@@ -43,6 +51,9 @@ export default function AddEditBadHabitScreen() {
   const isEditing = !!id;
   const [isLoading, setIsLoading] = useState(isEditing);
   const [isSaving, setIsSaving] = useState(false);
+  const badHabitGate = useCountLimitedFeatureGate('badHabits', countActiveBadHabits, {
+    enabled: !isEditing,
+  });
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<BadHabitCategory>(BadHabitCategory.BEHAVIORAL);
@@ -71,6 +82,10 @@ export default function AddEditBadHabitScreen() {
 
     if (!name.trim()) {
       Alert.alert('Missing Name', 'Please enter a name for this habit.');
+      return;
+    }
+    if (badHabitGate.locked) {
+      router.push('/premium' as any);
       return;
     }
 
@@ -103,7 +118,7 @@ export default function AddEditBadHabitScreen() {
     }
   };
 
-  const canSave = name.trim().length > 0;
+  const canSave = name.trim().length > 0 && !badHabitGate.locked;
 
   if (isLoading) {
     return (
@@ -141,12 +156,20 @@ export default function AddEditBadHabitScreen() {
       >
         {/* Empowering message for new habits */}
         {!isEditing && (
-          <View style={styles.empoweringBanner}>
-            <Ionicons name="shield-checkmark" size={20} color={Colors.Success} />
-            <Text style={styles.empoweringText}>
-              You&apos;re taking a brave step. This stays private, always.
-            </Text>
-          </View>
+          <>
+            <View style={styles.empoweringBanner}>
+              <Ionicons name="shield-checkmark" size={20} color={Colors.Success} />
+              <Text style={styles.empoweringText}>
+                You&apos;re taking a brave step. This stays private on this device.
+              </Text>
+            </View>
+            {badHabitGate.locked && (
+              <PremiumLockedBanner
+                featureName={badHabitGate.featureName}
+                onUpgrade={() => router.push('/premium' as any)}
+              />
+            )}
+          </>
         )}
 
         {/* Name */}
@@ -292,7 +315,7 @@ export default function AddEditBadHabitScreen() {
         <View style={styles.privacyBanner}>
           <Ionicons name="lock-closed" size={16} color={Colors.TextSecondary} />
           <Text style={styles.privacyText}>
-            Your data is stored locally and encrypted. It is never synced or shared.
+            Your data is stored locally and never synced or shared. Local encryption is planned next.
           </Text>
         </View>
 
@@ -322,30 +345,23 @@ export default function AddEditBadHabitScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
-    flexDirection: 'row',
+    ...CommonStyles.stackHeader,
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.screenH,
     paddingBottom: Spacing.md,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Shapes.IconBg,
-    backgroundColor: Colors.WarmSand + '60',
-    justifyContent: 'center',
-    alignItems: 'center',
+    ...CommonStyles.stackHeaderButton,
   },
   headerTitle: {
     ...Typography.Headline2,
     color: Colors.TextPrimary,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.screenH,
+    ...CommonStyles.formScrollContent,
     paddingTop: Spacing.md,
   },
   empoweringBanner: {
@@ -366,38 +382,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   label: {
-    ...Typography.SectionLabel,
-    color: Colors.TextSecondary,
-    textTransform: 'uppercase',
-    marginBottom: Spacing.sm,
+    ...CommonStyles.sectionLabel,
   },
   labelSpaced: {
-    marginTop: Spacing.lg,
+    ...CommonStyles.sectionLabelSpaced,
   },
   inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.Background,
-    borderColor: Colors.DustyTaupe,
-    borderWidth: 1,
-    borderRadius: Shapes.Input,
-    paddingHorizontal: Spacing.md,
-    minHeight: 52,
+    ...CommonStyles.inputWrapper,
   },
   inputIcon: {
-    marginRight: Spacing.sm,
+    ...CommonStyles.inputIcon,
   },
   input: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    ...Typography.Body1,
-    color: Colors.TextPrimary,
+    ...CommonStyles.input,
   },
   charCount: {
-    ...Typography.Micro,
-    color: Colors.TextSecondary,
-    textAlign: 'right',
-    marginTop: 4,
+    ...CommonStyles.charCount,
   },
   categoryGrid: {
     flexDirection: 'row',
@@ -543,14 +543,13 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   textAreaWrapper: {
-    alignItems: 'flex-start',
+    ...CommonStyles.textAreaWrapper,
   },
   textAreaIcon: {
-    marginTop: Spacing.md,
+    ...CommonStyles.textAreaIcon,
   },
   textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
+    ...CommonStyles.textArea,
   },
   privacyBanner: {
     flexDirection: 'row',
@@ -567,32 +566,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   ctaContainer: {
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.BorderSubtle,
-    backgroundColor: Colors.Surface,
+    ...CommonStyles.ctaContainer,
   },
   ctaButton: {
-    borderRadius: Shapes.Button,
-    backgroundColor: Colors.SteelBlue,
-    height: 52,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
+    ...CommonStyles.primaryCtaButton,
   },
   ctaButtonDisabled: {
-    opacity: 0.5,
+    ...CommonStyles.primaryCtaButtonDisabled,
   },
   ctaText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.Surface,
-    letterSpacing: 0.4,
+    ...CommonStyles.primaryCtaText,
   },
   ctaTextDisabled: {
-    color: Colors.Surface,
-    opacity: 0.7,
+    ...CommonStyles.primaryCtaTextDisabled,
   },
 });

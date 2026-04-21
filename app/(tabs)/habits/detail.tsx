@@ -11,7 +11,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
+import {
+  formatDateOnly,
+  getHabitHistoryCutoffDate,
+  getMaxDateString,
+  getPremiumFeatureGate,
+} from '@/constants/featureLimits';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { useSubscription } from '@/hooks/useSubscription';
 import { safeBack } from '@/navigation/safeBack';
 import { RingProgress } from '@/components/RingProgress';
 import {
@@ -95,6 +103,7 @@ export default function HabitDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  const { isPremium } = useSubscription();
   const [activeTab, setActiveTab] = useState<TabType>('calendar');
   const [habit, setHabit] = useState<Habit | null>(null);
   const [completions, setCompletions] = useState<HabitCompletion[]>([]);
@@ -205,13 +214,31 @@ export default function HabitDetailScreen() {
     );
   }
 
-  const cal = getMonthlyCalendar(completions, habit.createdAt, calendarMonth);
+  const historyCutoffDate = getHabitHistoryCutoffDate();
+  const historyCutoffStr = formatDateOnly(historyCutoffDate);
+  const calendarStartDate = isPremium
+    ? habit.createdAt.slice(0, 10)
+    : getMaxDateString(habit.createdAt.slice(0, 10), historyCutoffStr);
+  const calendarCompletions = isPremium
+    ? completions
+    : completions.filter((completion) => completion.completedDate >= historyCutoffStr);
+  const hasOlderHistory = completions.some(
+    (completion) => completion.completedDate < historyCutoffStr,
+  );
+  const habitHistoryGate = getPremiumFeatureGate('habitHistory', isPremium, hasOlderHistory);
+  const cal = getMonthlyCalendar(calendarCompletions, calendarStartDate, calendarMonth);
   const now = new Date();
   const currentMonthIndex = now.getFullYear() * 12 + now.getMonth();
   const viewedMonthIndex = calendarMonth.getFullYear() * 12 + calendarMonth.getMonth();
   const isAtCurrentMonth = viewedMonthIndex >= currentMonthIndex;
+  const earliestCalendarMonth = new Date(calendarStartDate);
+  earliestCalendarMonth.setDate(1);
+  const earliestCalendarMonthIndex =
+    earliestCalendarMonth.getFullYear() * 12 + earliestCalendarMonth.getMonth();
+  const canGoToPreviousMonth = viewedMonthIndex > earliestCalendarMonthIndex;
 
   const goToPreviousMonth = () => {
+    if (!canGoToPreviousMonth) return;
     setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
   };
 
@@ -326,10 +353,16 @@ export default function HabitDetailScreen() {
                   onPress={goToPreviousMonth}
                   style={({ pressed }) => [
                     styles.calendarNavBtn,
+                    !canGoToPreviousMonth && styles.calendarNavBtnDisabled,
                     { transform: [{ scale: pressed ? 0.94 : 1 }] },
                   ]}
+                  disabled={!canGoToPreviousMonth}
                 >
-                  <Ionicons name="chevron-back" size={18} color={Colors.TextPrimary} />
+                  <Ionicons
+                    name="chevron-back"
+                    size={18}
+                    color={canGoToPreviousMonth ? Colors.TextPrimary : Colors.DustyTaupe}
+                  />
                 </Pressable>
 
                 <View style={styles.calendarHeaderCenter}>
@@ -420,6 +453,15 @@ export default function HabitDetailScreen() {
                   <Text style={styles.legendText}>Upcoming</Text>
                 </View>
               </View>
+
+              {habitHistoryGate.locked && (
+                <View style={styles.premiumBannerWrap}>
+                  <PremiumLockedBanner
+                    featureName={habitHistoryGate.featureName}
+                    onUpgrade={() => router.push('/premium' as any)}
+                  />
+                </View>
+              )}
             </View>
 
             <View style={styles.insightCard}>
@@ -834,6 +876,9 @@ const styles = StyleSheet.create({
   legendText: {
     ...Typography.Micro,
     color: Colors.TextSecondary,
+  },
+  premiumBannerWrap: {
+    marginTop: Spacing.md,
   },
   actionSection: {
     marginTop: Spacing.sm,

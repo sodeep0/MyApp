@@ -1,11 +1,13 @@
 // React hooks for accessing stores reactively
 import { useState, useEffect, useCallback } from 'react';
 import {
+  DISPLAY_NAME_KEY,
   getDisplayName,
   isOnboardingCompleted,
   setOnboardingCompleted,
   updateDisplayName,
 } from '@/stores/userStore';
+import { storage } from '@/storage/asyncStorage';
 
 /**
  * Generic hook that loads data once and provides a refresh function.
@@ -44,7 +46,14 @@ export function useDisplayName(): [string, (name: string) => Promise<void>] {
   const [name, setName] = useState('User');
 
   useEffect(() => {
-    getDisplayName().then(setName);
+    const loadName = () => {
+      getDisplayName().then(setName);
+    };
+
+    loadName();
+    const unsubscribe = storage.subscribe(DISPLAY_NAME_KEY, loadName);
+
+    return unsubscribe;
   }, []);
 
   const updateName = async (newName: string) => {

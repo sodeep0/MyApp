@@ -43,7 +43,6 @@ export default function SignInScreen() {
 
         const user = await signInWithGoogleIdToken(idToken);
 
-        await storage.setItem("kaarma_logged_in", true);
         await storage.setItem("kaarma_user_email", user.email ?? "");
         await storage.setItem(
           "kaarma_display_name",
@@ -59,7 +58,7 @@ export default function SignInScreen() {
     };
 
     completeSignIn();
-  }, [response]);
+  }, [response, router]);
 
   const handleGoogle = async () => {
     if (!hasGoogleConfig) {

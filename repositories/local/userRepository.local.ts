@@ -4,7 +4,7 @@ import type { UserRepository } from '@/repositories/interfaces/userRepository';
 
 const USER_PROFILE_KEY = 'kaarma_user_profile';
 const ONBOARDING_KEY = 'kaarma_onboarding_completed';
-const DISPLAY_NAME_KEY = 'kaarma_display_name';
+export const DISPLAY_NAME_KEY = 'kaarma_display_name';
 const INTENTIONS_KEY = 'kaarma_selected_intentions';
 
 async function readProfile(): Promise<UserProfile | null> {
@@ -13,6 +13,14 @@ async function readProfile(): Promise<UserProfile | null> {
 
 async function writeProfile(profile: UserProfile): Promise<void> {
   await storage.setItem(USER_PROFILE_KEY, profile);
+}
+
+export async function clearUserLocalSessionData(): Promise<void> {
+  await Promise.all([
+    storage.removeItem(USER_PROFILE_KEY),
+    storage.removeItem(DISPLAY_NAME_KEY),
+    storage.removeItem(INTENTIONS_KEY),
+  ]);
 }
 
 export const userLocalRepository: UserRepository = {

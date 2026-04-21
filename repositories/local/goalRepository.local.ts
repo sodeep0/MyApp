@@ -6,6 +6,10 @@ import type { GoalRepository } from '@/repositories/interfaces/goalRepository';
 
 const GOALS_KEY = 'kaarma_goals';
 
+export async function clearGoalLocalCache(): Promise<void> {
+  await storage.removeItem(GOALS_KEY);
+}
+
 export const goalLocalRepository: GoalRepository = {
   async getAllGoals() {
     return (await storage.getItem<Goal[]>(GOALS_KEY)) ?? [];

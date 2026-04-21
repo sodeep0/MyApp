@@ -1,50 +1,128 @@
-# Welcome to your Expo app 👋
+# Kaarma
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Kaarma is a local-first Expo React Native productivity app focused on:
 
-## Get started
+- habits
+- goals
+- journaling
+- private bad-habit recovery tracking
+- activity logging
+- screen-time awareness
+
+The current codebase is a working prototype moving toward MVP. Core local persistence is in place, a hybrid cloud foundation exists for selected modules, and sensitive modules remain local-only by policy.
+
+## Current Status
+
+What works today:
+
+- onboarding flow
+- Google sign-in with Firebase
+- habits, goals, journal, bad habits, and activity logging with persisted data
+- profile/settings shell
+- premium upsell flow with mock subscription state
+- Android-first screen-time dashboard groundwork
+- repository-based local/cloud architecture for profile, habits, goals, and activities
+
+What is still incomplete:
+
+- premium enforcement
+- encrypted storage for sensitive modules
+- notifications
+- export/delete/privacy tooling
+- release hardening and test coverage
+- full app blocking/scheduling behavior
+
+## Tech Stack
+
+- Expo SDK 54
+- Expo Router 6
+- React Native 0.81.5
+- React 19
+- TypeScript
+- Firebase Auth + Firestore
+- AsyncStorage
+- `@react-native-google-signin/google-signin`
+- `expo-android-usagestats`
+
+## Project Structure
+
+```text
+app/              # routes, onboarding, tabs, auth, profile, premium
+components/       # reusable UI
+constants/        # theme + shared styles
+docs/             # architecture and backend notes
+hooks/            # reusable hooks
+navigation/       # shared navigation helpers
+repositories/     # local/firebase adapters + interfaces + factory
+services/         # firebase, sync, screen-time integrations
+storage/          # AsyncStorage wrapper
+stores/           # domain-facing store APIs
+types/            # shared models
+```
+
+## Data Policy
+
+- Journal: local-only
+- Bad habits: local-only
+- Profile, habits, goals, activities: hybrid local/cloud eligible
+
+Sensitive modules should not be synced to Firebase.
+
+## Getting Started
 
 1. Install dependencies
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
 2. Start the app
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
 ```bash
-npm run reset-project
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Useful commands:
 
-## Learn more
+```bash
+npm run android
+npm run ios
+npm run web
+npx tsc --noEmit
+npm run lint
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Firebase-related commands:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npm run firebase:emulators
+npm run firebase:rules:deploy
+npm run firebase:indexes:deploy
+```
 
-## Join the community
+## Development Notes
 
-Join our community of developers creating universal apps.
+- `app/index.tsx` handles onboarding redirect
+- `app/_layout.tsx` handles app bootstrap, fonts, auth bootstrap, and sync triggers
+- `README.md` is the high-level entry point for the repo
+- `progress.md` is the source for verified implementation status
+- `requirements.md` describes realistic current scope and near-term expectations
+- `AGENTS.md` contains repository working guidance
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Platform Notes
+
+- Android is the primary target for current native feature work
+- Screen-time usage integration is Android/dev-client oriented
+- Expo Go should not be treated as a full environment for native screen-time behavior
+
+## Documentation
+
+- [progress.md](./progress.md)
+- [requirements.md](./requirements.md)
+- [AGENTS.md](./AGENTS.md)
+- [docs/data-policy.md](./docs/data-policy.md)
+- [docs/firestore-schema.md](./docs/firestore-schema.md)
+
+## Current Expectation
+
+Kaarma should currently be understood as a strong local-first prototype with real data flows and a partial hybrid cloud foundation, not yet as a production-ready app release.

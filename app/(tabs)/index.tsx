@@ -1,8 +1,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
+  FlatList,
   Modal,
   Pressable,
   ScrollView,
@@ -11,8 +12,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Card } from "../../components/Card";
-import { RingProgress } from "../../components/RingProgress";
 import {
   Colors,
   Shadows,
@@ -35,7 +34,12 @@ import {
   markHabitComplete,
   unmarkHabitComplete,
 } from "../../stores/habitStore";
-import { type BadHabit, type Goal, type Habit } from "../../types/models";
+import {
+  type BadHabit,
+  type Goal,
+  type Habit,
+  HabitCategory,
+} from "../../types/models";
 
 function getGreeting(name: string) {
   const hour = new Date().getHours();
@@ -53,108 +57,54 @@ function getDateString() {
   });
 }
 
-const DAILY_PROMPTS = [
-  "What's one thing you're grateful for today?",
-  "How are you feeling right now?",
-  "What would make today a win?",
-  "Describe your energy level in one word.",
-  "What challenge did you overcome recently?",
-  "What intention do you want to set for tomorrow?",
-  "What's something that brought you joy this week?",
-];
+function getGoalProgress(goal: Goal) {
+  if (goal.goalType === "QUANTITATIVE" && goal.targetValue && goal.targetValue > 0) {
+    return Math.min(goal.currentValue / goal.targetValue, 1);
+  }
 
-function getDailyPrompt() {
-  const dayOfYear = Math.floor(
-    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) /
-      86400000,
-  );
-  return DAILY_PROMPTS[dayOfYear % DAILY_PROMPTS.length];
+  if (goal.goalType === "MILESTONE" && goal.milestones.length > 0) {
+    const done = goal.milestones.filter((m) => m.isCompleted).length;
+    return Math.min(done / goal.milestones.length, 1);
+  }
+
+  return 0;
 }
 
-function AnimatedPressable({
-  onPress,
-  style,
-  children,
-}: {
-  onPress: () => void;
-  style?: object;
-  children: React.ReactNode;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          opacity: pressed ? 0.7 : 1,
-          transform: [{ scale: pressed ? 0.96 : 1 }],
-        },
-        style,
-      ]}
-    >
-      {children}
-    </Pressable>
-  );
+function getHabitCategoryLabel(category: HabitCategory) {
+  if (category === HabitCategory.HEALTH) return "Health";
+  if (category === HabitCategory.MIND) return "Mind";
+  if (category === HabitCategory.WORK) return "Work";
+  if (category === HabitCategory.PERSONAL) return "Personal";
+  return "Custom";
 }
 
-function HabitRow({
-  habit,
-  completed,
-  streak,
-  onPress,
-  onToggle,
-}: {
-  habit: Habit;
-  completed: boolean;
-  streak: number;
-  onPress: () => void;
-  onToggle: () => void;
-}) {
-  const habitColor = habit.colorHex || Colors.SteelBlue;
+function getGoalEmoji(goal: Goal) {
+  if (goal.category === "FITNESS") return "🏃";
+  if (goal.category === "LEARNING") return "📚";
+  if (goal.category === "CAREER") return "💼";
+  if (goal.category === "FINANCE") return "💰";
+  if (goal.category === "RELATIONSHIP") return "❤️";
+  return "🎯";
+}
 
-  return (
-    <Pressable onPress={onPress} style={styles.habitRow}>
-      <View style={[styles.habitColorDot, { backgroundColor: habitColor }]} />
-
-      <View style={styles.habitInfo}>
-        <Text
-          style={[styles.habitName, completed && styles.habitNameDone]}
-          numberOfLines={1}
-        >
-          {habit.name || "Untitled Habit"}
-        </Text>
-      </View>
-
-      {streak > 0 && (
-        <View style={styles.habitStreak}>
-          <Ionicons name="flame" size={12} color={Colors.Surface} />
-          <Text style={styles.habitStreakText}>{streak}d</Text>
-        </View>
-      )}
-
-      <Pressable onPress={onToggle} style={styles.habitToggle} hitSlop={8}>
-        {completed ? (
-          <Ionicons name="checkmark-circle" size={22} color={Colors.Success} />
-        ) : (
-          <Ionicons
-            name="ellipse-outline"
-            size={22}
-            color={Colors.DustyTaupe}
-          />
-        )}
-      </Pressable>
-    </Pressable>
-  );
+function getGoalAccent(goal: Goal) {
+  if (goal.category === "FITNESS") return Colors.Success;
+  if (goal.category === "LEARNING") return Colors.SteelBlue;
+  if (goal.category === "CAREER") return Colors.Warning;
+  if (goal.category === "FINANCE") return Colors.TextSecondary;
+  if (goal.category === "RELATIONSHIP") return Colors.Danger;
+  return Colors.SoftSky;
 }
 
 const QUICK_ACTIONS = [
   {
-    label: "+Habit",
+    label: "Habit",
     icon: "add-circle-outline",
     route: "/(tabs)/habits/add-edit" as const,
   },
   {
-    label: "+Log",
-    icon: "pencil-outline",
+    label: "Log",
+    icon: "create-outline",
     route: "/(tabs)/track/activity" as const,
   },
   {
@@ -173,90 +123,95 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [displayName] = useDisplayName();
+
   const [showFAB, setShowFAB] = useState(false);
-
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [todayDone, setTodayDone] = useState<Set<string>>(new Set());
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [streaks, setStreaks] = useState<Record<string, number>>({});
   const [badHabits, setBadHabits] = useState<BadHabit[]>([]);
-  const [bestStreakDays, setBestStreakDays] = useState<number>(0);
+  const [todayDone, setTodayDone] = useState<Set<string>>(new Set());
+  const [streaks, setStreaks] = useState<Record<string, number>>({});
+  const [bestStreakDays, setBestStreakDays] = useState(0);
   const [hasRelapsed, setHasRelapsed] = useState(false);
-
-  useEffect(() => {
-    loadAllData();
-  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      return () => {
-        setShowFAB(false);
-      };
+      loadAllData();
+      return () => setShowFAB(false);
     }, []),
   );
 
   const loadAllData = async () => {
-    const [habitsData, goalsData, badHabitsData] = await Promise.all([
+    const [habitsData, goalsData, badHabitsData, urgeEvents] = await Promise.all([
       getAllHabits(),
       getAllGoals(),
       getAllBadHabits(),
+      getAllUrgeEvents(),
     ]);
+
     setHabits(habitsData);
     setGoals(goalsData);
     setBadHabits(badHabitsData);
 
     const doneSet = new Set<string>();
     const streakMap: Record<string, number> = {};
+
     await Promise.all(
       habitsData.map(async (habit) => {
         const done = await getTodayCompletionsForHabit(habit.id);
-        if (done.length > 0) {
-          doneSet.add(habit.id);
-        }
+        if (done.length > 0) doneSet.add(habit.id);
+
         const completions = await getCompletionsForHabit(habit.id);
-        const streak = calcStreak(
+        streakMap[habit.id] = calcStreak(
           completions,
           habit.frequency,
           habit.weekDays,
           habit.timesPerWeek,
           habit.everyNDays,
         );
-        streakMap[habit.id] = streak;
       }),
     );
+
     setTodayDone(doneSet);
     setStreaks(streakMap);
 
-    if (badHabitsData.length > 0) {
-      let bestDays = 0;
-      let anyRelapsed = false;
-      await Promise.all(
-        badHabitsData.map(async (bh) => {
-          const events = await getAllUrgeEvents();
-          const relapseEvents = events.filter(
-            (e) => e.badHabitId === bh.id && e.type === "RELAPSE",
-          );
-          if (relapseEvents.length > 0) anyRelapsed = true;
-          const days = daysSinceQuit(bh.quitDate);
-          if (days > bestDays) bestDays = days;
-        }),
+    let bestDays = 0;
+    let relapsed = false;
+    badHabitsData.forEach((bh) => {
+      const hasBadHabitRelapse = urgeEvents.some(
+        (event) => event.badHabitId === bh.id && event.type === "RELAPSE",
       );
-      setBestStreakDays(bestDays);
-      setHasRelapsed(anyRelapsed);
-    }
+      if (hasBadHabitRelapse) relapsed = true;
+      bestDays = Math.max(bestDays, daysSinceQuit(bh.quitDate));
+    });
+    setBestStreakDays(bestDays);
+    setHasRelapsed(relapsed);
   };
 
   const completedCount = todayDone.size;
   const totalHabits = habits.length;
-  const progress = totalHabits > 0 ? completedCount / totalHabits : 0;
-  const displayNameStr = String(displayName).split(" ")[0] || "User";
+  const activeGoals = goals.filter((g) => g.status === "ACTIVE");
   const maxStreak =
     Object.values(streaks).length > 0 ? Math.max(...Object.values(streaks)) : 0;
-  const recoveryProgress = Math.min(bestStreakDays / 30, 1);
-  const recoveryPct = Math.round(recoveryProgress * 100);
-  const recentHabits = [...habits]
+  const recoveryPct = Math.max(0, Math.min(bestStreakDays / 7, 1));
+  const displayNameStr = String(displayName).split(" ")[0] || "User";
+
+  const dailyScore = useMemo(() => {
+    const habitCompletion = totalHabits > 0 ? completedCount / totalHabits : 0;
+    const goalMomentum =
+      activeGoals.length > 0
+        ? activeGoals.filter((goal) => getGoalProgress(goal) > 0).length /
+          activeGoals.length
+        : 0;
+    const streakMomentum = Math.min(maxStreak / 7, 1);
+
+    return Math.round(
+      (habitCompletion * 0.6 + goalMomentum * 0.2 + streakMomentum * 0.2) * 100,
+    );
+  }, [activeGoals, completedCount, maxStreak, totalHabits]);
+
+  const topHabits = [...habits]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 4);
+    .slice(0, 3);
 
   const toggleComplete = async (habitId: string) => {
     if (todayDone.has(habitId)) {
@@ -266,439 +221,341 @@ export default function HomeScreen() {
         next.delete(habitId);
         return next;
       });
-    } else {
-      await markHabitComplete(habitId);
-      setTodayDone((prev) => {
-        const next = new Set(prev);
-        next.add(habitId);
-        return next;
-      });
-      const habit = habits.find((h) => h.id === habitId);
-      if (habit) {
-        const completions = await getCompletionsForHabit(habitId);
-        const streak = calcStreak(
-          completions,
-          habit.frequency,
-          habit.weekDays,
-          habit.timesPerWeek,
-          habit.everyNDays,
-        );
-        setStreaks((prev) => ({ ...prev, [habitId]: streak }));
-      }
+      return;
     }
+
+    await markHabitComplete(habitId);
+    setTodayDone((prev) => {
+      const next = new Set(prev);
+      next.add(habitId);
+      return next;
+    });
+
+    const habit = habits.find((h) => h.id === habitId);
+    if (!habit) return;
+    const completions = await getCompletionsForHabit(habitId);
+    const streak = calcStreak(
+      completions,
+      habit.frequency,
+      habit.weekDays,
+      habit.timesPerWeek,
+      habit.everyNDays,
+    );
+    setStreaks((prev) => ({ ...prev, [habitId]: streak }));
   };
 
-  const activeGoals = goals.filter((g) => g.status === "ACTIVE");
-
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* ── Top Bar ──────────────────────────────────── */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>{getGreeting(displayNameStr)}</Text>
-          <Text style={styles.dateText}>{getDateString()}</Text>
-        </View>
-        <View style={styles.headerActions}>
-          <Pressable style={styles.headerBtn} hitSlop={8}>
-            <Ionicons
-              name="notifications-outline"
-              size={28}
-              color={Colors.TextPrimary}
-            />
-          </Pressable>
-          <AnimatedPressable
-            onPress={() => router.push("/profile" as any)}
-            style={styles.avatar}
-          >
-            <Ionicons name="person" size={18} color={Colors.SteelBlue} />
-          </AnimatedPressable>
-        </View>
-      </View>
-
-      {/* ── Scrollable Content ───────────────────────── */}
+    <View style={[styles.container, { paddingTop: insets.top }]}> 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 190 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Daily Score Hero Card ────────────────── */}
-        <View style={styles.heroCard}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.dateText}>{getDateString()}</Text>
+            <Text style={styles.greeting}>{getGreeting(displayNameStr)} 👋</Text>
+          </View>
+
+          <Pressable
+            onPress={() => router.push("/profile" as any)}
+            style={({ pressed }) => [
+              styles.avatar,
+              { transform: [{ scale: pressed ? 0.96 : 1 }] },
+            ]}
+          >
+            <Ionicons name="person" size={20} color={Colors.SteelBlue} />
+          </Pressable>
+        </View>
+
+        <View style={styles.scoreCard}>
           <LinearGradient
-            colors={[Colors.SteelBlue, Colors.TextPrimary]}
+            colors={[Colors.Success, Colors.SteelBlue]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.heroGradient}
+            style={styles.scoreGradient}
           >
-            <RingProgress
-              progress={progress}
-              size={160}
-              strokeWidth={10}
-              value={`${Math.round(progress * 100)}%`}
-              label={"Today's Score"}
-              color={Colors.Surface}
-              trackColor={Colors.DustyTaupe}
-              light
-            />
-            <View style={styles.miniStatsRow}>
-              <View style={styles.miniStat}>
-                <Text style={styles.miniStatValue}>{completedCount}</Text>
-                <Text style={styles.miniStatLabel}>HABITS DONE</Text>
+            <View style={styles.scoreTop}>
+              <Text style={styles.scoreLabel}>Daily Kaarma Score</Text>
+              <View style={styles.scoreValueRow}>
+                <Text style={styles.scoreValue}>{dailyScore}</Text>
+                <Text style={styles.scoreOutOf}>/100</Text>
               </View>
-              <View style={styles.miniStatDivider} />
-              <View style={styles.miniStat}>
-                <Text style={styles.miniStatValue}>{maxStreak}</Text>
-                <Text style={styles.miniStatLabel}>STREAK</Text>
+            </View>
+
+            <View style={styles.scoreDivider} />
+
+            <View style={styles.scoreBottomRow}>
+              <View style={styles.scoreStatCol}>
+                <Text style={styles.scoreStatValue}>{`${completedCount}/${Math.max(totalHabits, 0)}`}</Text>
+                <Text style={styles.scoreStatLabel}>Habits</Text>
               </View>
-              <View style={styles.miniStatDivider} />
-              <View style={styles.miniStat}>
-                <Text style={styles.miniStatValue}>2h</Text>
-                <Text style={styles.miniStatLabel}>FOCUS TIME</Text>
+
+              <View style={styles.scoreStatCol}>
+                <Text style={styles.scoreStatValue}>{activeGoals.length}</Text>
+                <Text style={styles.scoreStatLabel}>Goals</Text>
+              </View>
+
+              <View style={styles.streakPill}>
+                <Ionicons name="flame" size={13} color={Colors.Surface} />
+                <Text style={styles.streakPillText}>{`${maxStreak} day streak`}</Text>
               </View>
             </View>
           </LinearGradient>
         </View>
 
-        {/* ── Quick Action Row ────────────────────── */}
-        <View style={styles.quickActionsRow}>
+        <View style={styles.quickGrid}>
           {QUICK_ACTIONS.map((action) => (
             <Pressable
               key={action.label}
-              onPress={() => {
-                router.push(action.route as any);
-              }}
+              onPress={() => router.push(action.route as any)}
               style={({ pressed }) => [
-                styles.quickActionWrapper,
-                {
-                  opacity: pressed ? 0.7 : 1,
-                  transform: [{ scale: pressed ? 0.98 : 1 }],
-                },
+                styles.quickCard,
+                { transform: [{ scale: pressed ? 0.98 : 1 }] },
               ]}
             >
-              <View style={styles.quickActionCard}>
-                <Ionicons
-                  name={action.icon as any}
-                  size={20}
-                  color={Colors.SteelBlue}
-                />
-                <Text style={styles.quickActionLabel}>{action.label}</Text>
-              </View>
+              <Ionicons name={action.icon as any} size={22} color={Colors.SteelBlue} />
+              <Text style={styles.quickLabel}>{action.label}</Text>
             </Pressable>
           ))}
         </View>
 
-        {/* ── Today's Habits ───────────────────────── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionCaptionTitle}>{"TODAY'S HABITS"}</Text>
-            <AnimatedPressable
-              onPress={() => router.push("/(tabs)/habits" as any)}
-            >
-              <View style={styles.seeAll}>
-                <Text style={styles.seeAllText}>See all</Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={14}
-                  color={Colors.SteelBlue}
-                />
-              </View>
-            </AnimatedPressable>
-          </View>
-
-          <View style={styles.habitList}>
-            {habits.length === 0 && (
-              <View
-                style={{ paddingVertical: Spacing.md, alignItems: "center" }}
-              >
-                <Ionicons
-                  name="time-outline"
-                  size={40}
-                  color={Colors.DustyTaupe}
-                />
-                <Text
-                  style={{
-                    ...Typography.Body1,
-                    color: Colors.TextSecondary,
-                    marginTop: Spacing.sm,
-                  }}
-                >
-                  No habits yet
-                </Text>
-                <Text
-                  style={{
-                    ...Typography.Body2,
-                    color: Colors.TextSecondary,
-                    marginTop: Spacing.xs,
-                  }}
-                >
-                  Create your first habit to get started
-                </Text>
-              </View>
-            )}
-            {recentHabits.map((habit) => {
-              const completed = todayDone.has(habit.id);
-              const streak = streaks[habit.id] || 0;
-              return (
-                <HabitRow
-                  key={habit.id}
-                  habit={habit}
-                  completed={completed}
-                  streak={streak}
-                  onPress={() =>
-                    router.push(`/habits/detail?id=${habit.id}` as any)
-                  }
-                  onToggle={() => toggleComplete(habit.id)}
-                />
-              );
-            })}
-          </View>
-        </View>
-
-        {/* ── Bad Habit Tracker Snapshot ──────────── */}
-        {badHabits.length > 0 && (
-          <View style={styles.badHabitSection}>
-            <Pressable
-              onPress={() => router.push("/(tabs)/track/bad-habits" as any)}
-              style={({ pressed }) => [
-                styles.badHabitCardWrapper,
-                { transform: [{ scale: pressed ? 0.98 : 1 }] },
-              ]}
-            >
-              <Card style={styles.badHabitCard} padding={Spacing.md}>
-                <View style={styles.badHabitCategoryBadge}>
-                  <Text style={styles.badHabitCategoryText}>RECOVERY TRACKER</Text>
-                </View>
-                <Text style={styles.badHabitCardTitle} numberOfLines={2}>
-                  {hasRelapsed ? "Bounce back from relapse" : `${bestStreakDays} days clean`}
-                </Text>
-                <View style={styles.badHabitProgress}>
-                  <View style={styles.badHabitBarBg}>
-                    <View
-                      style={[
-                        styles.badHabitBarFill,
-                        {
-                          width: `${Math.max(hasRelapsed ? 6 : recoveryPct, 6)}%`,
-                          backgroundColor: hasRelapsed ? Colors.Danger : Colors.Success,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.badHabitProgressText}>
-                    {hasRelapsed ? "Reset" : `${recoveryPct}%`}
-                  </Text>
-                </View>
-                <View style={styles.badHabitFooter}>
-                  <Text style={styles.badHabitSubtext}>
-                    {hasRelapsed
-                      ? "Restart your streak and keep moving"
-                      : `${badHabits.length} habits tracked`}
-                  </Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={Colors.TextSecondary}
-                  />
-                </View>
-              </Card>
+            <Text style={styles.sectionTitle}>Today&apos;s Habits</Text>
+            <Pressable onPress={() => router.push("/(tabs)/habits" as any)}>
+              <Text style={styles.sectionAction}>See all</Text>
             </Pressable>
           </View>
-        )}
 
-        {/* ── Journal Prompt Card ──────────────────── */}
-        <View style={styles.journalSection}>
-          <Card style={styles.journalCard} padding={Spacing.lg}>
-            <Ionicons
-              name="book-outline"
-              size={20}
-              color={Colors.DustyTaupe}
-              style={{ marginBottom: Spacing.sm }}
-            />
-            <Text style={styles.journalPrompt}>{getDailyPrompt()}</Text>
-            <AnimatedPressable
-              onPress={() => router.push("/(tabs)/track/journal" as any)}
-              style={{ marginTop: Spacing.md }}
-            >
-              <View style={styles.journalButton}>
-                <Text style={styles.journalButtonText}>Write Entry</Text>
-              </View>
-            </AnimatedPressable>
-          </Card>
-        </View>
-
-        {/* ── Goal Progress Row ────────────────────── */}
-        {activeGoals.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionCaptionTitle}>GOALS IN PROGRESS</Text>
-              <AnimatedPressable
-                onPress={() => router.push("/(tabs)/goals" as any)}
-              >
-                <View style={styles.seeAll}>
-                  <Text style={styles.seeAllText}>See all</Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={14}
-                    color={Colors.SteelBlue}
-                  />
-                </View>
-              </AnimatedPressable>
+          {topHabits.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="sparkles-outline" size={24} color={Colors.DustyTaupe} />
+              <Text style={styles.emptyStateTitle}>No habits yet</Text>
+              <Text style={styles.emptyStateCaption}>Create one to start your day with intent.</Text>
             </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.carousel}
-              contentContainerStyle={styles.carouselContent}
-            >
-              {activeGoals.map((goal) => {
-                const goalProgress =
-                  goal.goalType === "QUANTITATIVE" && goal.targetValue
-                    ? Math.min(goal.currentValue / goal.targetValue, 1)
-                    : 0;
-                const pct = Math.round(goalProgress * 100);
+          ) : (
+            <View style={styles.habitList}>
+              {topHabits.map((habit) => {
+                const completed = todayDone.has(habit.id);
+                const category = getHabitCategoryLabel(habit.category);
+                const badgeBg = completed ? Colors.Success + "20" : Colors.SoftSky + "2A";
+                const badgeColor = completed ? Colors.Success : Colors.SteelBlue;
+
                 return (
                   <Pressable
-                    key={goal.id}
-                    onPress={() =>
-                      router.push(`/goals/detail?id=${goal.id}` as any)
-                    }
+                    key={habit.id}
+                    onPress={() => router.push(`/habits/detail?id=${habit.id}` as any)}
                     style={({ pressed }) => [
-                      styles.carouselCardWrapper,
-                      { transform: [{ scale: pressed ? 0.98 : 1 }] },
+                      styles.habitCard,
+                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
                     ]}
                   >
-                    <Card padding={Spacing.md} style={styles.goalCarouselCard}>
-                      <View style={styles.goalCategoryBadge}>
-                        <Text
-                          style={[
-                            styles.goalCategoryText,
-                            { color: Colors.TextPrimary },
-                          ]}
-                        >
-                          {goal.category.toLowerCase()}
-                        </Text>
+                    <View style={styles.habitLeft}>
+                      <View
+                        style={[
+                          styles.habitIconCircle,
+                          {
+                            borderColor: completed ? Colors.Success : Colors.SteelBlue,
+                            backgroundColor: completed
+                              ? Colors.Success + "12"
+                              : Colors.SteelBlue + "10",
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name={completed ? "checkmark" : "ellipse-outline"}
+                          size={18}
+                          color={completed ? Colors.Success : Colors.SteelBlue}
+                        />
                       </View>
-                      <Text style={styles.goalCardTitle} numberOfLines={2}>
-                        {goal.title || "Untitled Goal"}
-                      </Text>
-                      {goal.goalType === "QUANTITATIVE" && goal.targetValue && (
-                        <View style={styles.goalCardProgress}>
-                          <View style={styles.goalBarBg}>
-                            <View
-                              style={[
-                                styles.goalBarFill,
-                                { width: `${Math.max(pct, 4)}%` },
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.goalCardProgressText}>
-                            {pct}%
+
+                      <View style={styles.habitTextBlock}>
+                        <Text
+                          style={[styles.habitName, completed && styles.habitNameDone]}
+                          numberOfLines={1}
+                        >
+                          {habit.name || "Untitled Habit"}
+                        </Text>
+                        <View style={[styles.habitBadge, { backgroundColor: badgeBg }]}> 
+                          <Text style={[styles.habitBadgeText, { color: badgeColor }]}>
+                            {category}
                           </Text>
                         </View>
-                      )}
-                      {goal.targetDate && (
-                        <Text style={styles.goalDueDate}>
-                          Due{" "}
-                          {new Date(goal.targetDate).toLocaleDateString(
-                            "en-US",
-                            { month: "short", day: "numeric" },
-                          )}
-                        </Text>
-                      )}
-                    </Card>
+                      </View>
+                    </View>
+
+                    <Pressable onPress={() => toggleComplete(habit.id)} hitSlop={8}>
+                      <Ionicons
+                        name={completed ? "checkmark-circle" : "ellipse-outline"}
+                        size={24}
+                        color={completed ? Colors.Success : Colors.DustyTaupe}
+                      />
+                    </Pressable>
                   </Pressable>
                 );
               })}
-            </ScrollView>
-          </View>
-        )}
+            </View>
+          )}
+        </View>
 
-        <View style={{ height: 120 }} />
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Your Goals</Text>
+            <Pressable onPress={() => router.push("/(tabs)/goals" as any)}>
+              <Text style={styles.sectionAction}>See all</Text>
+            </Pressable>
+          </View>
+
+          {activeGoals.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="flag-outline" size={24} color={Colors.DustyTaupe} />
+              <Text style={styles.emptyStateTitle}>No active goals</Text>
+              <Text style={styles.emptyStateCaption}>Set a target and track momentum here.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={activeGoals}
+              horizontal
+              nestedScrollEnabled
+              keyExtractor={(goal) => goal.id}
+              contentContainerStyle={styles.goalListContent}
+              showsHorizontalScrollIndicator={false}
+              renderItem={({ item: goal }) => {
+                const progress = getGoalProgress(goal);
+                const progressPct = Math.round(progress * 100);
+                const accent = getGoalAccent(goal);
+
+                return (
+                  <Pressable
+                    onPress={() => router.push(`/goals/detail?id=${goal.id}` as any)}
+                    style={({ pressed }) => [
+                      styles.goalCard,
+                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
+                    ]}
+                  >
+                    <View style={styles.goalCardTop}>
+                      <Text style={styles.goalEmoji}>{getGoalEmoji(goal)}</Text>
+                      <View
+                        style={[styles.goalProgressPill, { backgroundColor: accent + "1F" }]}
+                      >
+                        <Text style={[styles.goalProgressPillText, { color: accent }]}>
+                          {progressPct}% complete
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.goalTitle} numberOfLines={2}>
+                      {goal.title || "Untitled Goal"}
+                    </Text>
+
+                    <Text style={styles.goalDate}>
+                      {goal.targetDate
+                        ? `Deadline: ${new Date(goal.targetDate).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}`
+                        : "Open-ended goal"}
+                    </Text>
+
+                    <View style={styles.goalBarTrack}>
+                      <View
+                        style={[
+                          styles.goalBarFill,
+                          {
+                            width: `${Math.max(progressPct, 4)}%`,
+                            backgroundColor: accent,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </Pressable>
+                );
+              }}
+            />
+          )}
+        </View>
+
+        <Pressable
+          onPress={() => router.push("/(tabs)/track/bad-habits" as any)}
+          style={({ pressed }) => [
+            styles.recoveryCard,
+            { transform: [{ scale: pressed ? 0.99 : 1 }] },
+          ]}
+        >
+          <View style={styles.recoveryTopRow}>
+            <View style={styles.recoveryIconBox}>
+              <Ionicons name="warning-outline" size={22} color={Colors.Warning} />
+            </View>
+
+            <View style={styles.recoveryPill}>
+              <Text style={styles.recoveryPillText}>private</Text>
+            </View>
+          </View>
+
+          <Text style={styles.recoveryOverline}>Bad Habits</Text>
+          <Text style={styles.recoveryTitle}>
+            {badHabits.length === 0
+              ? "Start your recovery tracker"
+              : hasRelapsed
+                ? "Recovery reset"
+                : `${bestStreakDays} clean days`}
+          </Text>
+          <Text style={styles.recoveryCaption}>
+            {badHabits.length === 0
+              ? "Tap to set up private tracking"
+              : hasRelapsed
+                ? "Log slip-ups and get back on track"
+                : "Keep your streak alive"}
+          </Text>
+
+          <View style={styles.recoveryBarTrack}>
+            <View
+              style={[
+                styles.recoveryBarFill,
+                { width: `${Math.max(Math.round(recoveryPct * 100), 6)}%` },
+              ]}
+            />
+          </View>
+        </Pressable>
       </ScrollView>
 
-      {/* ── Quick Add FAB: Bottom-right ──────────────────── */}
-      <AnimatedPressable
+      <Pressable
         onPress={() => setShowFAB(true)}
-        style={{
-          position: "absolute",
-          right: Spacing.screenH + 22,
-          bottom: insets.bottom + 70,
-        }}
+        style={({ pressed }) => [
+          styles.fab,
+          {
+            bottom: insets.bottom + 82,
+            transform: [{ scale: pressed ? 0.95 : 1 }],
+          },
+        ]}
       >
-        <View style={styles.fabCircle}>
-          <Ionicons name="add" size={27} color={Colors.Surface} />
-        </View>
-      </AnimatedPressable>
+        <Ionicons name="add" size={28} color={Colors.Surface} />
+      </Pressable>
 
-      {/* ── FAB Modal ────────────────────────────────── */}
       <Modal
         visible={showFAB}
         transparent
         animationType="fade"
         onRequestClose={() => setShowFAB(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowFAB(false)}
-        >
-          <View style={styles.fabSheet}>
-            <AnimatedPressable
-              onPress={() => {
-                setShowFAB(false);
-                router.push("/(tabs)/habits/add-edit" as any);
-              }}
-            >
-              <View style={styles.sheetOption}>
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={22}
-                  color={Colors.SteelBlue}
-                />
-                <Text style={styles.sheetOptionText}>Check in a habit</Text>
-              </View>
-            </AnimatedPressable>
-            <AnimatedPressable
-              onPress={() => {
-                setShowFAB(false);
-                router.push("/(tabs)/track/journal" as any);
-              }}
-            >
-              <View style={styles.sheetOption}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={22}
-                  color={Colors.SteelBlue}
-                />
-                <Text style={styles.sheetOptionText}>Journal entry</Text>
-              </View>
-            </AnimatedPressable>
-            <AnimatedPressable
-              onPress={() => {
-                setShowFAB(false);
-                router.push("/(tabs)/track/activity" as any);
-              }}
-            >
-              <View style={styles.sheetOption}>
-                <Ionicons
-                  name="footsteps-outline"
-                  size={22}
-                  color={Colors.SteelBlue}
-                />
-                <Text style={styles.sheetOptionText}>Log activity</Text>
-              </View>
-            </AnimatedPressable>
-            <AnimatedPressable
-              onPress={() => {
-                setShowFAB(false);
-                router.push("/(tabs)/goals/add-edit" as any);
-              }}
-            >
-              <View style={[styles.sheetOption, { borderBottomWidth: 0 }]}>
-                <Ionicons
-                  name="flag-outline"
-                  size={22}
-                  color={Colors.SteelBlue}
-                />
-                <Text style={styles.sheetOptionText}>Create a goal</Text>
-              </View>
-            </AnimatedPressable>
+        <Pressable style={styles.overlay} onPress={() => setShowFAB(false)}>
+          <View style={styles.sheet}>
+            {QUICK_ACTIONS.map((action) => (
+              <Pressable
+                key={action.label}
+                onPress={() => {
+                  setShowFAB(false);
+                  router.push(action.route as any);
+                }}
+                style={styles.sheetOption}
+              >
+                <Ionicons name={action.icon as any} size={20} color={Colors.SteelBlue} />
+                <Text style={styles.sheetLabel}>{action.label}</Text>
+              </Pressable>
+            ))}
           </View>
         </Pressable>
       </Modal>
@@ -711,406 +568,389 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.Background,
   },
+  scrollContent: {
+    paddingHorizontal: Spacing.screenH,
+    paddingTop: Spacing.md,
+    gap: Spacing.md,
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    alignItems: "center",
   },
   headerLeft: {
     flex: 1,
+    paddingRight: Spacing.md,
+  },
+  dateText: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 1,
   },
   greeting: {
     ...Typography.Headline1,
     color: Colors.TextPrimary,
-    fontWeight: "700",
-  },
-  dateText: {
-    ...Typography.Body2,
-    color: Colors.TextSecondary,
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
-  },
-  headerBtn: {
-    padding: Spacing.sm,
+    marginTop: 4,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.SteelBlue + "18",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: Colors.SteelBlue,
+    backgroundColor: Colors.SoftSky + "30",
     justifyContent: "center",
     alignItems: "center",
   },
-
-  scrollContent: {
-    paddingBottom: Spacing.lg,
-  },
-
-  // ── Daily Score Hero Card ────────────────────────────
-  heroCard: {
-    marginHorizontal: Spacing.screenH,
-    marginBottom: Spacing.md,
-    borderRadius: Shapes.HeroCard,
+  scoreCard: {
+    borderRadius: 32,
     overflow: "hidden",
     ...Shadows.HeroCard,
   },
-  heroGradient: {
-    alignItems: "center",
-    paddingVertical: Spacing.xl,
-    paddingHorizontal: Spacing.md,
+  scoreGradient: {
+    padding: Spacing.lg,
   },
-  miniStatsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: Spacing.lg,
-    gap: Spacing.sm,
+  scoreTop: {
+    marginBottom: Spacing.md,
   },
-  miniStat: {
-    alignItems: "center",
-    flex: 1,
-  },
-  miniStatValue: {
-    ...Typography.Stat,
-    color: Colors.Surface,
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: "700",
-  },
-  miniStatLabel: {
+  scoreLabel: {
     ...Typography.Caption,
     color: Colors.Surface + "CC",
-    marginTop: 2,
-    letterSpacing: 0.8,
+    textTransform: "uppercase" as const,
+    letterSpacing: 1,
   },
-  miniStatDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: Colors.Surface + "30",
+  scoreValueRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 4,
+    marginTop: Spacing.xs,
   },
-
-  // ── Quick Action Row ─────────────────────────────────
-  quickActionsRow: {
+  scoreValue: {
+    ...Typography.Display,
+    color: Colors.Surface,
+    fontSize: 68,
+    lineHeight: 72,
+    fontWeight: "500" as const,
+  },
+  scoreOutOf: {
+    ...Typography.Body2,
+    color: Colors.Surface + "A8",
+    marginBottom: 10,
+  },
+  scoreDivider: {
+    height: 1,
+    backgroundColor: Colors.Surface + "40",
+    marginBottom: Spacing.md,
+  },
+  scoreBottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: Spacing.screenH,
-    marginBottom: Spacing.md,
+    alignItems: "center",
     gap: Spacing.sm,
   },
-  quickActionWrapper: {
-    flex: 1,
+  scoreStatCol: {
+    minWidth: 56,
   },
-  quickActionCard: {
-    backgroundColor: Colors.Surface,
-    borderRadius: Shapes.QuickAction,
+  scoreStatValue: {
+    ...Typography.Body1,
+    color: Colors.Surface,
+    fontWeight: "700" as const,
+  },
+  scoreStatLabel: {
+    ...Typography.Caption,
+    color: Colors.Surface + "B8",
+    marginTop: 2,
+  },
+  streakPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: Shapes.PillButton,
+    backgroundColor: Colors.Surface + "2F",
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 6,
+  },
+  streakPillText: {
+    ...Typography.Caption,
+    color: Colors.Surface,
+    fontWeight: "700" as const,
+  },
+  quickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: Spacing.sm,
+  },
+  quickCard: {
+    width: "48.4%",
+    backgroundColor: Colors.SurfaceContainerLow,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: Colors.BorderSubtle,
-    paddingVertical: Spacing.sm + 2,
-    paddingHorizontal: Spacing.xs,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    ...Shadows.QuickAction,
+    paddingVertical: Spacing.lg,
+    gap: Spacing.xs,
   },
-  quickActionLabel: {
+  quickLabel: {
     ...Typography.Caption,
     color: Colors.TextPrimary,
-    fontWeight: "600" as const,
-    textAlign: "center",
+    fontWeight: "700" as const,
+    letterSpacing: 0.3,
   },
-
-  // ── Section Layout ────────────────────────────────────
   section: {
     marginTop: Spacing.sm,
-    marginBottom: Spacing.md,
   },
   sectionHeader: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: Spacing.screenH,
     marginBottom: Spacing.sm,
   },
-  sectionCaptionTitle: {
+  sectionTitle: {
+    ...Typography.Headline2,
+    color: Colors.TextPrimary,
+  },
+  sectionAction: {
     ...Typography.Caption,
-    color: Colors.TextSecondary,
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.8,
-  },
-  seeAll: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  seeAllText: {
-    ...Typography.Body2,
     color: Colors.SteelBlue,
-    fontWeight: "500" as const,
+    fontWeight: "700" as const,
+    textTransform: "uppercase" as const,
   },
-
-  // ── Habit Row ────────────────────────────────────────
+  emptyState: {
+    backgroundColor: Colors.Surface,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    borderRadius: Shapes.Card,
+    padding: Spacing.md,
+    alignItems: "center",
+    gap: 6,
+  },
+  emptyStateTitle: {
+    ...Typography.Body1,
+    color: Colors.TextPrimary,
+    fontWeight: "600" as const,
+  },
+  emptyStateCaption: {
+    ...Typography.Body2,
+    color: Colors.TextSecondary,
+    textAlign: "center" as const,
+  },
   habitList: {
-    paddingHorizontal: Spacing.screenH,
+    gap: Spacing.sm,
   },
-  habitRow: {
+  habitCard: {
+    borderRadius: 24,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    backgroundColor: Colors.Surface,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.Surface,
-    borderRadius: Shapes.Card,
-    borderColor: Colors.BorderSubtle,
-    borderWidth: 1,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.sm,
+    justifyContent: "space-between",
     ...Shadows.Card,
   },
-  habitColorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: Spacing.sm,
-  },
-  habitInfo: {
+  habitLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
     flex: 1,
-    marginRight: Spacing.xs,
+    paddingRight: Spacing.sm,
+  },
+  habitIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  habitTextBlock: {
+    flex: 1,
+    gap: 4,
   },
   habitName: {
     ...Typography.Body1,
     color: Colors.TextPrimary,
-    fontWeight: "500" as const,
+    fontWeight: "600" as const,
   },
   habitNameDone: {
     color: Colors.TextSecondary,
     textDecorationLine: "line-through" as const,
   },
-  habitStreak: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    marginRight: Spacing.sm,
-    backgroundColor: Colors.Success,
-    paddingHorizontal: Spacing.xs + 2,
-    paddingVertical: 2,
-    borderRadius: Shapes.Badge,
-  },
-  habitStreakText: {
-    ...Typography.Micro,
-    color: Colors.Surface,
-    fontWeight: "700" as const,
-  },
-  habitToggle: {
-    padding: 2,
-  },
-
-  // ── Bad Habit Tracker Snapshot ────────────────────────
-  badHabitSection: {
-    paddingHorizontal: Spacing.screenH,
-    marginBottom: Spacing.md,
-  },
-  badHabitCardWrapper: {
-    borderRadius: Shapes.Card,
-  },
-  badHabitCard: {
-    borderRadius: Shapes.Card,
-  },
-  badHabitCategoryBadge: {
-    borderRadius: Shapes.Chip,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    backgroundColor: Colors.WarmSand,
+  habitBadge: {
     alignSelf: "flex-start",
-    marginBottom: Spacing.xs,
+    borderRadius: Shapes.PillButton,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
   },
-  badHabitCategoryText: {
+  habitBadgeText: {
     ...Typography.Micro,
-    fontWeight: "600" as const,
+    fontWeight: "700" as const,
     textTransform: "uppercase" as const,
-    color: Colors.TextPrimary,
+    letterSpacing: 0.7,
   },
-  badHabitCardTitle: {
-    ...Typography.Headline2,
-    color: Colors.TextPrimary,
-    marginBottom: Spacing.sm,
+  goalListContent: {
+    paddingRight: Spacing.xs,
   },
-  badHabitProgress: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.xs,
+  goalCard: {
+    width: 280,
+    borderRadius: 30,
+    backgroundColor: Colors.Surface,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    padding: Spacing.md,
+    marginRight: Spacing.sm,
+    ...Shadows.Card,
   },
-  badHabitBarBg: {
-    flex: 1,
-    height: 8,
-    backgroundColor: Colors.WarmSand,
-    borderRadius: Shapes.PillButton,
-    overflow: "hidden",
-  },
-  badHabitBarFill: {
-    height: "100%",
-    borderRadius: Shapes.PillButton,
-  },
-  badHabitProgressText: {
-    ...Typography.Caption,
-    color: Colors.TextSecondary,
-    fontWeight: "600" as const,
-    minWidth: 40,
-    textAlign: "right" as const,
-  },
-  badHabitFooter: {
+  goalCardTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 2,
-  },
-  badHabitSubtext: {
-    ...Typography.Caption,
-    color: Colors.TextSecondary,
-    flex: 1,
-  },
-
-  // ── Journal Prompt Card ──────────────────────────────
-  journalSection: {
-    paddingHorizontal: Spacing.screenH,
-    marginBottom: Spacing.md,
-  },
-  journalCard: {
-    backgroundColor: Colors.WarmSand,
-    borderColor: "#E8D5C0",
-    borderWidth: 1,
-    borderRadius: Shapes.HeroCard,
-  },
-  journalPrompt: {
-    ...Typography.Body1,
-    color: Colors.TextSecondary,
-    fontStyle: "italic" as const,
-    lineHeight: 24,
-  },
-  journalButton: {
-    alignSelf: "flex-start",
-    borderWidth: 1.5,
-    borderColor: Colors.SteelBlue,
-    borderRadius: Shapes.Button,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-  },
-  journalButtonText: {
-    ...Typography.Body2,
-    color: Colors.SteelBlue,
-    fontWeight: "600" as const,
-  },
-
-  // ── Goals Carousel ────────────────────────────────────
-  carousel: {
-    marginTop: Spacing.xs,
-  },
-  carouselContent: {
-    paddingLeft: Spacing.screenH,
-    paddingRight: Spacing.screenH - Spacing.sm,
-  },
-  carouselCardWrapper: {
-    width: 260,
-    marginRight: Spacing.sm,
-  },
-  goalCarouselCard: {
-    borderRadius: Shapes.Card,
-  },
-  goalCategoryBadge: {
-    borderRadius: Shapes.Chip,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    backgroundColor: Colors.WarmSand,
-    alignSelf: "flex-start",
-    marginBottom: Spacing.xs,
-  },
-  goalCategoryText: {
-    ...Typography.Micro,
-    fontWeight: "600" as const,
-    textTransform: "uppercase" as const,
-  },
-  goalCardTitle: {
-    ...Typography.Headline2,
-    color: Colors.TextPrimary,
     marginBottom: Spacing.sm,
   },
-  goalCardProgress: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.xs,
+  goalEmoji: {
+    fontSize: 28,
   },
-  goalBarBg: {
-    flex: 1,
-    height: 8,
-    backgroundColor: Colors.WarmSand,
+  goalProgressPill: {
     borderRadius: Shapes.PillButton,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+  },
+  goalProgressPillText: {
+    ...Typography.Micro,
+    fontWeight: "700" as const,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.6,
+  },
+  goalTitle: {
+    ...Typography.Headline2,
+    color: Colors.TextPrimary,
+    marginBottom: 2,
+  },
+  goalDate: {
+    ...Typography.Body2,
+    color: Colors.TextSecondary,
+    marginBottom: Spacing.md,
+  },
+  goalBarTrack: {
+    height: 8,
+    borderRadius: Shapes.PillButton,
+    backgroundColor: Colors.SurfaceContainerLow,
     overflow: "hidden",
   },
   goalBarFill: {
     height: "100%",
-    backgroundColor: Colors.SteelBlue,
     borderRadius: Shapes.PillButton,
   },
-  goalCardProgressText: {
-    ...Typography.Caption,
-    color: Colors.TextSecondary,
-    fontWeight: "600" as const,
-    minWidth: 36,
-    textAlign: "right" as const,
+  recoveryCard: {
+    marginTop: Spacing.sm,
+    borderRadius: 30,
+    padding: Spacing.md,
+    backgroundColor: Colors.Surface,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    ...Shadows.Card,
   },
-  goalDueDate: {
-    ...Typography.Caption,
-    color: Colors.TextSecondary,
-    backgroundColor: Colors.BorderSubtle,
+  recoveryTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.sm,
+  },
+  recoveryIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.Warning + "14",
+  },
+  recoveryPill: {
+    borderRadius: Shapes.PillButton,
     paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: Shapes.Chip,
-    alignSelf: "flex-start",
+    paddingVertical: 4,
+    backgroundColor: Colors.SoftSky + "32",
+  },
+  recoveryPillText: {
+    ...Typography.Micro,
+    color: Colors.SteelBlue,
+    textTransform: "uppercase" as const,
+    fontWeight: "700" as const,
+    letterSpacing: 0.8,
+  },
+  recoveryOverline: {
+    ...Typography.Micro,
+    color: Colors.Warning,
+    fontWeight: "700" as const,
+    textTransform: "uppercase" as const,
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  recoveryTitle: {
+    ...Typography.Headline2,
+    color: Colors.TextPrimary,
+    marginBottom: 2,
+  },
+  recoveryCaption: {
+    ...Typography.Body2,
+    color: Colors.TextSecondary,
+    marginBottom: Spacing.md,
+  },
+  recoveryBarTrack: {
+    height: 8,
+    borderRadius: Shapes.PillButton,
+    backgroundColor: Colors.SurfaceContainerLow,
     overflow: "hidden",
   },
-
-  // ── FAB ─────────────────────────────────────────────
-  fabCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.TextPrimary,
-    justifyContent: "center",
+  recoveryBarFill: {
+    height: "100%",
+    borderRadius: Shapes.PillButton,
+    backgroundColor: Colors.Warning,
+  },
+  fab: {
+    position: "absolute",
+    right: Spacing.screenH,
+    width: 60,
+    height: 60,
+    borderRadius: 18,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.TextPrimary,
     ...Shadows.FAB,
   },
-  modalOverlay: {
+  overlay: {
     flex: 1,
     backgroundColor: Colors.OverlayLight,
     justifyContent: "flex-end",
     alignItems: "center",
   },
-  fabSheet: {
-    backgroundColor: Colors.Surface,
-    borderRadius: Shapes.BottomSheet,
-    ...Shadows.Modal,
+  sheet: {
     width: "90%",
     maxWidth: 360,
-    marginBottom: Spacing.lg,
+    backgroundColor: Colors.Surface,
+    borderRadius: Shapes.BottomSheet,
     padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    ...Shadows.Modal,
   },
   sheetOption: {
+    minHeight: 52,
+    borderRadius: Shapes.Input,
+    backgroundColor: Colors.SurfaceContainerLow,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.BorderSubtle,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
   },
-  sheetOptionText: {
+  sheetLabel: {
     ...Typography.Body1,
     color: Colors.TextPrimary,
-    fontWeight: "500" as const,
+    fontWeight: "600" as const,
   },
 });

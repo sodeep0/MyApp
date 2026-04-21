@@ -3,8 +3,12 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
+import { CommonStyles } from '@/constants/commonStyles';
+import { getCountLimitedFeatureGate } from '@/constants/featureLimits';
+import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
 import { GoalCard } from '@/components/GoalCard';
+import { useSubscription } from '@/hooks/useSubscription';
 import {
   type Goal,
   GoalStatus,
@@ -29,6 +33,7 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
 export default function GoalListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isPremium } = useSubscription();
   const [activeTab, setActiveTab] = useState<FilterTab>(GoalStatus.ACTIVE);
   const [goals, setGoals] = useState<Goal[]>([]);
 
@@ -44,6 +49,17 @@ export default function GoalListScreen() {
   );
 
   const filteredGoals = goals.filter((goal) => goal.status === activeTab);
+  const activeGoalCount = goals.filter((goal) => goal.status === GoalStatus.ACTIVE).length;
+  const goalGate = getCountLimitedFeatureGate('activeGoals', isPremium, activeGoalCount);
+
+  const handleCreateGoal = () => {
+    if (goalGate.locked) {
+      router.push('/premium' as any);
+      return;
+    }
+
+    router.push('/(tabs)/goals/add-edit' as any);
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -95,11 +111,20 @@ export default function GoalListScreen() {
             </Text>
             <Pressable
               style={styles.emptyButton}
-              onPress={() => router.push('/(tabs)/goals/add-edit' as any)}
+              onPress={handleCreateGoal}
             >
               <Ionicons name="add" size={18} color={Colors.Surface} />
               <Text style={styles.emptyButtonText}>Create Goal</Text>
             </Pressable>
+          </View>
+        )}
+
+        {goalGate.locked && (
+          <View style={styles.premiumBannerWrap}>
+            <PremiumLockedBanner
+              featureName={goalGate.featureName}
+              onUpgrade={() => router.push('/premium' as any)}
+            />
           </View>
         )}
 
@@ -131,7 +156,7 @@ export default function GoalListScreen() {
             bottom: insets.bottom + 70,
           },
         ]}
-        onPress={() => router.push('/(tabs)/goals/add-edit' as any)}
+        onPress={handleCreateGoal}
       >
         <Ionicons name="add" size={26} color={Colors.Surface} />
       </Pressable>
@@ -141,60 +166,44 @@ export default function GoalListScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    ...CommonStyles.listHeader,
   },
   headerLeft: {
-    flex: 1,
+    ...CommonStyles.listHeaderLeft,
   },
   title: {
-    ...Typography.Headline1,
-    color: Colors.TextPrimary,
-    fontWeight: '700',
+    ...CommonStyles.listHeaderTitle,
   },
   subtitle: {
-    ...Typography.Body2,
-    color: Colors.TextSecondary,
-    marginTop: 2,
+    ...CommonStyles.listHeaderSubtitle,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.screenH,
+    ...CommonStyles.listContent,
     paddingBottom: Spacing.md,
   },
   chipContainer: {
-    marginBottom: Spacing.lg,
+    ...CommonStyles.filterChipRowContainer,
   },
   chipContent: {
-    gap: Spacing.sm,
+    ...CommonStyles.filterChipRowContent,
   },
   chip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Shapes.Chip,
-    backgroundColor: Colors.WarmSand,
+    ...CommonStyles.filterChip,
   },
   chipSelected: {
-    backgroundColor: Colors.SoftSky,
+    ...CommonStyles.filterChipSelected,
   },
   chipLabel: {
-    ...Typography.Caption,
-    color: Colors.TextSecondary,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    ...CommonStyles.filterChipLabel,
   },
   chipLabelSelected: {
-    color: Colors.Surface,
+    ...CommonStyles.filterChipLabelSelected,
   },
   emptyState: {
-    alignItems: 'center',
+    ...CommonStyles.emptyStateCentered,
     paddingVertical: Spacing.xxl,
   },
   emptyIconBox: {
@@ -235,6 +244,9 @@ const styles = StyleSheet.create({
   cardGrid: {
     gap: Spacing.md,
   },
+  premiumBannerWrap: {
+    marginBottom: Spacing.md,
+  },
   goalCardWrapper: {
     position: 'relative',
   },
@@ -259,13 +271,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   fab: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.TextPrimary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.FAB,
+    ...CommonStyles.floatingFab,
   },
 });

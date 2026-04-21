@@ -1,5 +1,11 @@
 // services/firebase/auth.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearActivityLocalCache } from "@/repositories/local/activityRepository.local";
+import { clearGoalLocalCache } from "@/repositories/local/goalRepository.local";
+import { clearHabitLocalCache } from "@/repositories/local/habitRepository.local";
+import { clearUserLocalSessionData } from "@/repositories/local/userRepository.local";
+import { clearSyncQueue } from "@/services/sync/syncQueue";
+import { storage } from "@/storage/asyncStorage";
 import * as FirebaseAuth from "firebase/auth";
 import { Auth, Persistence, User, UserCredential } from "firebase/auth";
 import { Platform } from "react-native";
@@ -9,6 +15,18 @@ let authInstance: Auth | null = null;
 let bootstrapPromise: Promise<User | null> | null = null;
 let authUnavailable = false;
 let hasLoggedAuthUnavailable = false;
+
+async function clearSignedInUserSessionData(): Promise<void> {
+  await Promise.all([
+    clearHabitLocalCache(),
+    clearGoalLocalCache(),
+    clearActivityLocalCache(),
+    clearUserLocalSessionData(),
+    clearSyncQueue(["user", "habits", "goals", "activities"]),
+    storage.removeItem("kaarma_user_email"),
+    storage.removeItem("kaarma_logged_in"),
+  ]);
+}
 
 function logAuthUnavailable(message: string, error?: unknown): void {
   if (hasLoggedAuthUnavailable) return;
@@ -126,8 +144,14 @@ export async function createAccountWithEmailPassword(
 
 export async function signOutCurrentUser(): Promise<void> {
   const auth = getFirebaseAuth();
-  if (!auth) return;
+  if (!auth) {
+    await clearSignedInUserSessionData();
+    return;
+  }
+
   await FirebaseAuth.signOut(auth);
+  await clearSignedInUserSessionData();
+  await ensureAnonymousAuth();
 }
 
 export async function signInWithGoogleIdToken(idToken: string): Promise<User> {
@@ -147,4 +171,16 @@ export function getCurrentUserEmail(): string | null {
 
 export function getCurrentUserId(): string | null {
   return getFirebaseAuth()?.currentUser?.uid ?? null;
+}
+
+export function subscribeToAuthState(
+  listener: (user: User | null) => void,
+): () => void {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    listener(null);
+    return () => {};
+  }
+
+  return FirebaseAuth.onAuthStateChanged(auth, listener);
 }

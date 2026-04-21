@@ -9,7 +9,11 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
+import { CommonStyles } from '@/constants/commonStyles';
+import { getCountLimitedFeatureGate } from '@/constants/featureLimits';
+import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
+import { useSubscription } from '@/hooks/useSubscription';
 import { safeBack } from '@/navigation/safeBack';
 import { getAllBadHabits, daysSinceQuit } from '@/stores/badHabitStore';
 import type { BadHabit } from '@/types/models';
@@ -54,6 +58,7 @@ function StreakBadge({ days }: { days: number }) {
 export default function BadHabitListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isPremium } = useSubscription();
   const [badHabits, setBadHabits] = useState<BadHabit[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -68,6 +73,17 @@ export default function BadHabitListScreen() {
       loadData();
     }, [loadData]),
   );
+
+  const badHabitGate = getCountLimitedFeatureGate('badHabits', isPremium, badHabits.length);
+
+  const handleAddBadHabit = () => {
+    if (badHabitGate.locked) {
+      router.push('/premium' as any);
+      return;
+    }
+
+    router.push('/track/add-edit-bad-habit' as any);
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -143,14 +159,14 @@ export default function BadHabitListScreen() {
                 </View>
                 <Text style={styles.emptyTitle}>No bad habits tracked</Text>
                 <Text style={styles.emptySub}>
-                  Add one to start your recovery journey.{'\n'}Your data stays private and encrypted.
+                  Add one to start your recovery journey.{'\n'}Your data stays private on this device.
                 </Text>
                 <Pressable
                   style={({ pressed }) => [
                     styles.emptyCta,
                     { transform: [{ scale: pressed ? 0.98 : 1 }] },
                   ]}
-                  onPress={() => router.push('/track/add-edit-bad-habit' as any)}
+                  onPress={handleAddBadHabit}
                 >
                   <Ionicons name="add" size={20} color={Colors.Surface} />
                   <Text style={styles.emptyCtaText}>Track a Habit</Text>
@@ -160,10 +176,19 @@ export default function BadHabitListScreen() {
           </>
         )}
 
+        {badHabitGate.locked && (
+          <View style={styles.premiumBannerWrap}>
+            <PremiumLockedBanner
+              featureName={badHabitGate.featureName}
+              onUpgrade={() => router.push('/premium' as any)}
+            />
+          </View>
+        )}
+
         <View style={styles.privacyBanner}>
           <Ionicons name="lock-closed" size={14} color={Colors.TextSecondary} />
           <Text style={styles.privacyText}>
-            Your data is stored locally and encrypted. It is never synced or shared.
+            Your data is stored locally and never synced or shared. Local encryption is planned next.
           </Text>
         </View>
       </ScrollView>
@@ -178,7 +203,7 @@ export default function BadHabitListScreen() {
             },
             { transform: [{ scale: pressed ? 0.94 : 1 }] },
           ]}
-          onPress={() => router.push('/track/add-edit-bad-habit' as any)}
+          onPress={handleAddBadHabit}
         >
           <Ionicons name="add" size={28} color={Colors.Surface} />
         </Pressable>
@@ -189,41 +214,22 @@ export default function BadHabitListScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    gap: Spacing.sm,
+    ...CommonStyles.stackHeader,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Shapes.IconBg,
-    backgroundColor: Colors.WarmSand + '60',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
+    ...CommonStyles.stackHeaderButton,
   },
   headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 8,
+    ...CommonStyles.stackHeaderCenter,
   },
   headerTitle: {
-    ...Typography.Headline1,
-    color: Colors.TextPrimary,
-    fontWeight: '700',
+    ...CommonStyles.stackHeaderTitle,
   },
   headerSubtitle: {
-    ...Typography.Body2,
-    color: Colors.TextSecondary,
-    marginTop: 2,
+    ...CommonStyles.stackHeaderSubtitle,
   },
   loadingContainer: {
     flex: 1,
@@ -236,20 +242,13 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xxl,
   },
   sectionLabel: {
-    ...Typography.SectionLabel,
-    color: Colors.TextSecondary,
-    textTransform: 'uppercase',
+    ...CommonStyles.sectionLabel,
     letterSpacing: 0.8,
-    marginBottom: Spacing.sm,
   },
   habitCard: {
-    backgroundColor: Colors.Surface,
-    borderRadius: Shapes.Card,
-    borderWidth: 1,
-    borderColor: Colors.BorderSubtle,
+    ...CommonStyles.surfaceCard,
     padding: Spacing.md,
     marginBottom: Spacing.sm,
-    ...Shadows.Card,
   },
   habitCardTop: {
     flexDirection: 'row',
@@ -324,18 +323,12 @@ const styles = StyleSheet.create({
     color: Colors.TextSecondary,
   },
   emptyState: {
-    alignItems: 'center',
+    ...CommonStyles.emptyStateCentered,
     paddingVertical: Spacing.xxl,
-    gap: Spacing.sm,
   },
   emptyIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    ...CommonStyles.emptyIconCircleLg,
     backgroundColor: Colors.Success + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
   },
   emptyTitle: {
     ...Typography.Headline2,
@@ -380,14 +373,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     flex: 1,
   },
+  premiumBannerWrap: {
+    marginTop: Spacing.md,
+  },
   fab: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    ...CommonStyles.fabBase,
     backgroundColor: Colors.TextPrimary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.FAB,
   },
 });

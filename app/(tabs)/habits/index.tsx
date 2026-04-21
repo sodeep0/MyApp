@@ -9,6 +9,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { CommonStyles } from '@/constants/commonStyles';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
 import { Button } from '@/components/Button';
 import { RingProgress } from '@/components/RingProgress';
@@ -422,29 +423,19 @@ export default function HabitListScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    ...CommonStyles.listHeader,
   },
   headerLeft: {
-    flex: 1,
+    ...CommonStyles.listHeaderLeft,
   },
   headerTitle: {
-    ...Typography.Headline1,
-    color: Colors.TextPrimary,
-    fontWeight: '700' as const,
+    ...CommonStyles.listHeaderTitle,
   },
   headerSubtitle: {
-    ...Typography.Body2,
-    color: Colors.TextSecondary,
-    marginTop: 2,
+    ...CommonStyles.listHeaderSubtitle,
   },
   loadingContainer: {
     flex: 1,
@@ -456,33 +447,26 @@ const styles = StyleSheet.create({
     color: Colors.TextSecondary,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.screenH,
+    ...CommonStyles.listContent,
     paddingBottom: Spacing.md,
   },
   chipContainer: {
-    marginBottom: Spacing.lg,
+    ...CommonStyles.filterChipRowContainer,
   },
   chipContent: {
-    gap: Spacing.sm,
+    ...CommonStyles.filterChipRowContent,
   },
   chip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Shapes.Chip,
-    backgroundColor: Colors.WarmSand,
+    ...CommonStyles.filterChip,
   },
   chipSelected: {
-    backgroundColor: Colors.SoftSky,
+    ...CommonStyles.filterChipSelected,
   },
   chipLabel: {
-    ...Typography.Caption,
-    color: Colors.TextSecondary,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    ...CommonStyles.filterChipLabel,
   },
   chipLabelSelected: {
-    color: Colors.Surface,
+    ...CommonStyles.filterChipLabelSelected,
   },
   emptyState: {
     alignItems: 'center',

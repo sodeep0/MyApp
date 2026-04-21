@@ -1,6 +1,7 @@
 // User profile & preferences store
 import type { UserProfile, Intention } from '../types/models';
 import { getUserRepository } from '@/repositories/factory';
+export { DISPLAY_NAME_KEY } from '@/repositories/local/userRepository.local';
 
 function repo() {
   return getUserRepository();

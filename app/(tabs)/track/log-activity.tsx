@@ -12,6 +12,13 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { CommonStyles } from '@/constants/commonStyles';
+import {
+  FREE_TIER_LIMITS,
+  canEditActivityLog,
+  getActivityEditDeadline,
+  isActivityEditWindowExpiredError,
+} from '@/constants/featureLimits';
 import { safeBack } from '@/navigation/safeBack';
 import { addActivity, getActivityById, updateActivity } from '@/stores/activityStore';
 import { ActivityCategory, ActivityIntensity } from '@/types/models';
@@ -21,6 +28,17 @@ function getDateString() {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
+  });
+}
+
+function formatDeadline(deadline: Date | null): string | null {
+  if (!deadline) return null;
+
+  return deadline.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
   });
 }
 
@@ -61,6 +79,7 @@ export default function LogActivityScreen() {
   const isEditing = !!id;
   const [isLoading, setIsLoading] = useState(isEditing);
   const [isSaving, setIsSaving] = useState(false);
+  const [originalLoggedAt, setOriginalLoggedAt] = useState<string | null>(null);
 
   const [name, setName] = useState(
     typeof prefillName === 'string' ? prefillName : '',
@@ -77,6 +96,7 @@ export default function LogActivityScreen() {
 
   useEffect(() => {
     if (!isEditing) return;
+
     const loadActivity = async () => {
       const activity = await getActivityById(id as string);
       if (activity) {
@@ -87,14 +107,28 @@ export default function LogActivityScreen() {
         setTime(activity.time);
         setIntensity(activity.intensity);
         setNotes(activity.notes || '');
+        setOriginalLoggedAt(activity.loggedAt);
       }
       setIsLoading(false);
     };
+
     loadActivity();
   }, [id, isEditing]);
 
+  const isEditLocked = isEditing && !!originalLoggedAt && !canEditActivityLog(originalLoggedAt);
+  const editDeadline = originalLoggedAt ? getActivityEditDeadline(originalLoggedAt) : null;
+  const deadlineLabel = formatDeadline(editDeadline);
+
   const handleSave = async () => {
     if (isLoading || isSaving) return;
+
+    if (isEditLocked) {
+      Alert.alert(
+        'Editing Locked',
+        `Activities can only be edited within ${FREE_TIER_LIMITS.ACTIVITY_EDIT_WINDOW_HOURS} hours of logging.`,
+      );
+      return;
+    }
 
     if (!name.trim()) {
       Alert.alert('Missing Name', 'Please enter an activity name.');
@@ -126,13 +160,24 @@ export default function LogActivityScreen() {
       safeBack(router, '/(tabs)/track/activity');
     } catch (error) {
       console.error('Failed to save activity:', error);
-      Alert.alert('Error', 'Failed to save activity. Please try again.');
+      if (isActivityEditWindowExpiredError(error)) {
+        Alert.alert(
+          'Editing Locked',
+          `This activity is past the ${FREE_TIER_LIMITS.ACTIVITY_EDIT_WINDOW_HOURS}-hour edit window.`,
+        );
+      } else {
+        Alert.alert('Error', 'Failed to save activity. Please try again.');
+      }
     } finally {
       setIsSaving(false);
     }
   };
 
-  const canSave = name.trim().length > 0 && duration.trim().length > 0 && Number(duration) > 0;
+  const canSave =
+    !isEditLocked &&
+    name.trim().length > 0 &&
+    duration.trim().length > 0 &&
+    Number(duration) > 0;
 
   if (isLoading) {
     return (
@@ -162,7 +207,7 @@ export default function LogActivityScreen() {
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>
-            {isEditing ? 'Edit Activity' : 'Log Activity'}
+            {isEditLocked ? 'Activity Details' : isEditing ? 'Edit Activity' : 'Log Activity'}
           </Text>
           <Text style={styles.headerSubtitle}>{getDateString()}</Text>
         </View>
@@ -174,8 +219,32 @@ export default function LogActivityScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {isEditing && originalLoggedAt && (
+          <View style={[styles.editBanner, isEditLocked ? styles.editBannerLocked : styles.editBannerActive]}>
+            <View style={styles.editBannerIcon}>
+              <Ionicons
+                name={isEditLocked ? 'lock-closed' : 'time-outline'}
+                size={18}
+                color={isEditLocked ? Colors.Warning : Colors.SteelBlue}
+              />
+            </View>
+            <View style={styles.editBannerContent}>
+              <Text style={styles.editBannerTitle}>
+                {isEditLocked ? 'Edit window closed' : 'Edit window active'}
+              </Text>
+              <Text style={styles.editBannerText}>
+                {isEditLocked
+                  ? `Activities stay editable for ${FREE_TIER_LIMITS.ACTIVITY_EDIT_WINDOW_HOURS} hours after logging.`
+                  : deadlineLabel
+                    ? `You can edit this activity until ${deadlineLabel}.`
+                    : `Activities stay editable for ${FREE_TIER_LIMITS.ACTIVITY_EDIT_WINDOW_HOURS} hours after logging.`}
+              </Text>
+            </View>
+          </View>
+        )}
+
         <Text style={styles.label}>ACTIVITY NAME</Text>
-        <View style={styles.inputWrapper}>
+        <View style={[styles.inputWrapper, isEditLocked && styles.inputWrapperLocked]}>
           <Ionicons name="flash-outline" size={18} color={Colors.TextSecondary} style={styles.inputIcon} />
           <TextInput
             style={styles.input}
@@ -184,6 +253,7 @@ export default function LogActivityScreen() {
             value={name}
             onChangeText={setName}
             maxLength={50}
+            editable={!isEditLocked}
           />
         </View>
 
@@ -195,15 +265,17 @@ export default function LogActivityScreen() {
             return (
               <Pressable
                 key={cat.key}
+                disabled={isEditLocked}
                 onPress={() => setCategory(cat.key as ActivityCategory)}
                 style={({ pressed }) => [
                   styles.categoryItem,
                   isActive && styles.categoryItemActive,
                   isActive && { borderColor: catColor },
-                  { transform: [{ scale: pressed ? 0.96 : 1 }] },
+                  isEditLocked && styles.optionDisabled,
+                  { transform: [{ scale: pressed && !isEditLocked ? 0.96 : 1 }] },
                 ]}
               >
-                <View style={[styles.categoryIconCircle, { backgroundColor: catColor + '18' }]}>
+                <View style={[styles.categoryIconCircle, { backgroundColor: `${catColor}18` }]}>
                   <Ionicons name={cat.icon} size={20} color={isActive ? catColor : Colors.TextSecondary} />
                 </View>
                 <Text style={[styles.categoryItemLabel, isActive && { color: catColor, fontWeight: '600' }]}>
@@ -221,11 +293,13 @@ export default function LogActivityScreen() {
             return (
               <Pressable
                 key={mins}
+                disabled={isEditLocked}
                 onPress={() => setDuration(String(mins))}
                 style={({ pressed }) => [
                   styles.durationChip,
                   isSelected && styles.durationChipSelected,
-                  { transform: [{ scale: pressed ? 0.94 : 1 }] },
+                  isEditLocked && styles.optionDisabled,
+                  { transform: [{ scale: pressed && !isEditLocked ? 0.94 : 1 }] },
                 ]}
               >
                 <Text style={[styles.durationChipText, isSelected && styles.durationChipTextSelected]}>
@@ -235,7 +309,7 @@ export default function LogActivityScreen() {
             );
           })}
         </View>
-        <View style={styles.inputWrapper}>
+        <View style={[styles.inputWrapper, isEditLocked && styles.inputWrapperLocked]}>
           <Ionicons name="timer-outline" size={18} color={Colors.TextSecondary} style={styles.inputIcon} />
           <TextInput
             style={styles.input}
@@ -244,6 +318,7 @@ export default function LogActivityScreen() {
             value={duration}
             onChangeText={setDuration}
             keyboardType="decimal-pad"
+            editable={!isEditLocked}
           />
           <Text style={styles.inputSuffix}>min</Text>
         </View>
@@ -251,7 +326,7 @@ export default function LogActivityScreen() {
         <View style={styles.dateTimeRow}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, styles.labelSpaced]}>DATE</Text>
-            <View style={styles.inputWrapper}>
+            <View style={[styles.inputWrapper, isEditLocked && styles.inputWrapperLocked]}>
               <Ionicons name="calendar-outline" size={18} color={Colors.TextSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
@@ -259,13 +334,14 @@ export default function LogActivityScreen() {
                 placeholderTextColor={Colors.DustyTaupe}
                 value={date}
                 onChangeText={setDate}
+                editable={!isEditLocked}
               />
             </View>
           </View>
           <View style={{ width: Spacing.sm }} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, styles.labelSpaced]}>TIME</Text>
-            <View style={styles.inputWrapper}>
+            <View style={[styles.inputWrapper, isEditLocked && styles.inputWrapperLocked]}>
               <Ionicons name="time-outline" size={18} color={Colors.TextSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
@@ -273,6 +349,7 @@ export default function LogActivityScreen() {
                 placeholderTextColor={Colors.DustyTaupe}
                 value={time}
                 onChangeText={setTime}
+                editable={!isEditLocked}
               />
             </View>
           </View>
@@ -285,12 +362,14 @@ export default function LogActivityScreen() {
             return (
               <Pressable
                 key={int.key}
+                disabled={isEditLocked}
                 onPress={() => setIntensity(int.key as ActivityIntensity)}
                 style={({ pressed }) => [
                   styles.intensityOption,
                   isActive && styles.intensityOptionActive,
                   isActive && { borderColor: int.color },
-                  { transform: [{ scale: pressed ? 0.98 : 1 }] },
+                  isEditLocked && styles.optionDisabled,
+                  { transform: [{ scale: pressed && !isEditLocked ? 0.98 : 1 }] },
                 ]}
               >
                 <View style={styles.intensityRadio}>
@@ -308,7 +387,7 @@ export default function LogActivityScreen() {
         </View>
 
         <Text style={[styles.label, styles.labelSpaced]}>NOTES (OPTIONAL)</Text>
-        <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
+        <View style={[styles.inputWrapper, styles.textAreaWrapper, isEditLocked && styles.inputWrapperLocked]}>
           <Ionicons name="document-text-outline" size={18} color={Colors.TextSecondary} style={[styles.inputIcon, styles.textAreaIcon]} />
           <TextInput
             style={[styles.input, styles.textArea]}
@@ -319,6 +398,7 @@ export default function LogActivityScreen() {
             multiline
             numberOfLines={3}
             textAlignVertical="top"
+            editable={!isEditLocked}
           />
         </View>
 
@@ -335,9 +415,14 @@ export default function LogActivityScreen() {
             { transform: [{ scale: pressed && canSave && !isSaving && !isLoading ? 0.98 : 1 }] },
           ]}
         >
-          <Ionicons name="checkmark-circle" size={20} color={Colors.Surface} style={{ marginRight: Spacing.sm }} />
+          <Ionicons
+            name={isEditLocked ? 'lock-closed' : 'checkmark-circle'}
+            size={20}
+            color={Colors.Surface}
+            style={{ marginRight: Spacing.sm }}
+          />
           <Text style={[styles.ctaText, !canSave && styles.ctaTextDisabled]}>
-            {isEditing ? 'Save Changes' : 'Log Activity'}
+            {isEditLocked ? 'Editing Locked' : isEditing ? 'Save Changes' : 'Log Activity'}
           </Text>
         </Pressable>
       </View>
@@ -347,73 +432,81 @@ export default function LogActivityScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    gap: Spacing.sm,
+    ...CommonStyles.stackHeader,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Shapes.IconBg,
-    backgroundColor: Colors.WarmSand + '60',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
+    ...CommonStyles.stackHeaderButton,
   },
   headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 8,
+    ...CommonStyles.stackHeaderCenter,
   },
   headerTitle: {
-    ...Typography.Headline1,
+    ...CommonStyles.stackHeaderTitle,
+  },
+  headerSubtitle: {
+    ...CommonStyles.stackHeaderSubtitle,
+  },
+  scrollContent: {
+    ...CommonStyles.formScrollContent,
+  },
+  editBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    borderRadius: Shapes.Card,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  editBannerActive: {
+    backgroundColor: `${Colors.SoftSky}20`,
+    borderColor: `${Colors.SteelBlue}55`,
+  },
+  editBannerLocked: {
+    backgroundColor: `${Colors.WarmSand}90`,
+    borderColor: `${Colors.Warning}55`,
+  },
+  editBannerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.Surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editBannerContent: {
+    flex: 1,
+    gap: 2,
+  },
+  editBannerTitle: {
+    ...Typography.Body1,
     color: Colors.TextPrimary,
     fontWeight: '700',
   },
-  headerSubtitle: {
+  editBannerText: {
     ...Typography.Body2,
     color: Colors.TextSecondary,
-    marginTop: 2,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
   },
   label: {
-    ...Typography.SectionLabel,
-    color: Colors.TextSecondary,
-    textTransform: 'uppercase',
-    marginBottom: Spacing.sm,
+    ...CommonStyles.sectionLabel,
   },
   labelSpaced: {
-    marginTop: Spacing.lg,
+    ...CommonStyles.sectionLabelSpaced,
   },
   inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.Background,
-    borderColor: Colors.DustyTaupe,
-    borderWidth: 1,
-    borderRadius: Shapes.Input,
-    paddingHorizontal: Spacing.md,
-    minHeight: 52,
+    ...CommonStyles.inputWrapper,
+  },
+  inputWrapperLocked: {
+    opacity: 0.7,
   },
   inputIcon: {
-    marginRight: Spacing.sm,
+    ...CommonStyles.inputIcon,
   },
   input: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    ...Typography.Body1,
-    color: Colors.TextPrimary,
+    ...CommonStyles.input,
   },
   inputSuffix: {
     ...Typography.Body2,
@@ -451,6 +544,9 @@ const styles = StyleSheet.create({
   categoryItemLabel: {
     ...Typography.Caption,
     color: Colors.TextSecondary,
+  },
+  optionDisabled: {
+    opacity: 0.55,
   },
   durationPresets: {
     flexDirection: 'row',
@@ -524,42 +620,27 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   textAreaWrapper: {
-    alignItems: 'flex-start',
+    ...CommonStyles.textAreaWrapper,
   },
   textAreaIcon: {
-    marginTop: Spacing.md,
+    ...CommonStyles.textAreaIcon,
   },
   textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
+    ...CommonStyles.textArea,
   },
   ctaContainer: {
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.BorderSubtle,
-    backgroundColor: Colors.Surface,
+    ...CommonStyles.ctaContainer,
   },
   ctaButton: {
-    borderRadius: Shapes.Button,
-    backgroundColor: Colors.SteelBlue,
-    height: 52,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
+    ...CommonStyles.primaryCtaButton,
   },
   ctaButtonDisabled: {
-    opacity: 0.5,
+    ...CommonStyles.primaryCtaButtonDisabled,
   },
   ctaText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.Surface,
-    letterSpacing: 0.4,
+    ...CommonStyles.primaryCtaText,
   },
   ctaTextDisabled: {
-    color: Colors.Surface,
-    opacity: 0.7,
+    ...CommonStyles.primaryCtaTextDisabled,
   },
 });

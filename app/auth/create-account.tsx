@@ -43,7 +43,6 @@ export default function CreateAccountScreen() {
 
         const user = await signInWithGoogleIdToken(idToken);
 
-        await storage.setItem("kaarma_logged_in", true);
         await storage.setItem("kaarma_user_email", user.email ?? "");
         await storage.setItem(
           "kaarma_display_name",
@@ -51,7 +50,7 @@ export default function CreateAccountScreen() {
         );
 
         router.replace("/profile" as any);
-      } catch (e) {
+      } catch {
         setError("Google sign-up failed.");
       } finally {
         setSubmitting(false);
@@ -59,7 +58,7 @@ export default function CreateAccountScreen() {
     };
 
     completeSignUp();
-  }, [response]);
+  }, [response, router]);
 
   const handleGoogle = async () => {
     if (!hasGoogleConfig) {

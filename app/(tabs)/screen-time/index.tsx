@@ -1,4 +1,6 @@
 import PermissionGate from "@/components/screenTime/PermissionGate";
+import { PremiumLockedBanner } from "@/components/PremiumLockedBanner";
+import { getPremiumFeatureGate } from "@/constants/featureLimits";
 import {
   Colors,
   Shadows,
@@ -18,7 +20,8 @@ import {
 } from "@/services/screenTimeService";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useSubscription } from "@/hooks/useSubscription";
 import React, { Component, useState } from "react";
 import {
   ActivityIndicator,
@@ -395,6 +398,14 @@ export default function ScreenTimeDashboardScreen() {
 }
 
 function ScreenTimeContent() {
+  const router = useRouter();
+  const { isPremium } = useSubscription();
+  const focusAndBlockingGate = getPremiumFeatureGate(
+    "focusAndBlocking",
+    isPremium,
+  );
+  const focusSessionsGate = getPremiumFeatureGate("focusSessions", isPremium);
+  const appBlockingGate = getPremiumFeatureGate("appBlocking", isPremium);
   const [period, setPeriod] = useState<"today" | "week">("today");
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(
     null,
@@ -480,6 +491,10 @@ function ScreenTimeContent() {
   const handleStartFocus = () => {
     setFocusModeActive(true);
     setFocusMinutesRemaining(42);
+  };
+
+  const handlePremiumUpgrade = () => {
+    router.push('/premium' as any);
   };
 
   const endFocusMode = () => {
@@ -865,6 +880,14 @@ function ScreenTimeContent() {
           colors={[Colors.SteelBlue, Colors.TextPrimary]}
           style={styles.focusCard}
         >
+          {focusAndBlockingGate.locked && (
+            <View style={styles.focusBannerWrap}>
+              <PremiumLockedBanner
+                featureName={focusAndBlockingGate.featureName}
+                onUpgrade={handlePremiumUpgrade}
+              />
+            </View>
+          )}
           <View style={styles.focusContent}>
             <View style={styles.focusHeader}>
               <Ionicons name="cellular" size={24} color={Colors.SoftSky} />
@@ -875,7 +898,15 @@ function ScreenTimeContent() {
             </Text>
             <View style={styles.focusButtonsRow}>
               {FOCUS_DURATIONS.map((duration) => (
-                <AnimatedPressable key={duration.label} style={styles.focusBtn}>
+                <AnimatedPressable
+                  key={duration.label}
+                  style={styles.focusBtn}
+                  onPress={
+                    focusSessionsGate.locked
+                      ? handlePremiumUpgrade
+                      : handleStartFocus
+                  }
+                >
                   <Text style={styles.focusBtnLabel}>{duration.label}</Text>
                   <Text style={styles.focusBtnUnit}>{duration.unit}</Text>
                 </AnimatedPressable>
@@ -925,7 +956,14 @@ function ScreenTimeContent() {
                 </Text>
                 <Switch
                   value={isBlocked}
-                  onValueChange={() => toggleBlockedApp(app.packageName)}
+                  onValueChange={() => {
+                    if (!appBlockingGate.locked) {
+                      toggleBlockedApp(app.packageName);
+                      return;
+                    }
+
+                    handlePremiumUpgrade();
+                  }}
                   trackColor={{
                     false: Colors.BorderSubtle,
                     true: Colors.Danger + "80",
@@ -1296,6 +1334,11 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     overflow: "hidden",
     position: "relative",
+  },
+  focusBannerWrap: {
+    marginBottom: Spacing.md,
+    position: "relative",
+    zIndex: 1,
   },
   focusContent: { position: "relative", zIndex: 1 },
   focusHeader: {

@@ -12,10 +12,13 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
+import { CommonStyles } from '@/constants/commonStyles';
+import { useCountLimitedFeatureGate } from '@/hooks/useFeatureGate';
 import { safeBack } from '@/navigation/safeBack';
-import { addGoal, updateGoal, getGoalById } from '@/stores/goalStore';
+import { addGoal, getActiveGoalCount, updateGoal, getGoalById } from '@/stores/goalStore';
 import {
   GoalCategory,
   GoalType,
@@ -55,6 +58,9 @@ export default function AddEditGoalScreen() {
   const isEditing = isEditingMode;
   const [isLoading, setIsLoading] = useState(isEditingMode);
   const [isSaving, setIsSaving] = useState(false);
+  const goalGate = useCountLimitedFeatureGate('activeGoals', getActiveGoalCount, {
+    enabled: !isEditing,
+  });
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -117,6 +123,10 @@ export default function AddEditGoalScreen() {
       Alert.alert('Missing Target', 'Please enter a target value for quantitative goals.');
       return;
     }
+    if (goalGate.locked) {
+      router.push('/premium' as any);
+      return;
+    }
 
     const targetVal = goalType === GoalType.QUANTITATIVE ? parseFloat(targetValue) : null;
 
@@ -158,7 +168,10 @@ export default function AddEditGoalScreen() {
     }
   };
 
-  const canSave = title.trim() && (goalType !== 'QUANTITATIVE' || targetValue.trim());
+  const canSave =
+    !goalGate.locked &&
+    title.trim() &&
+    (goalType !== 'QUANTITATIVE' || targetValue.trim());
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -183,6 +196,15 @@ export default function AddEditGoalScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {!isEditing && goalGate.locked && (
+          <View style={styles.premiumBannerWrap}>
+            <PremiumLockedBanner
+              featureName={goalGate.featureName}
+              onUpgrade={() => router.push('/premium' as any)}
+            />
+          </View>
+        )}
+
         <Text style={styles.label}>Title</Text>
         <View style={styles.inputWrapper}>
           <Ionicons name="flag-outline" size={18} color={Colors.TextSecondary} style={styles.inputIcon} />
@@ -430,88 +452,57 @@ export default function AddEditGoalScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.Background,
+    ...CommonStyles.screenContainer,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    gap: Spacing.sm,
+    ...CommonStyles.stackHeader,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Shapes.IconBg,
-    backgroundColor: Colors.WarmSand + '60',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
+    ...CommonStyles.stackHeaderButton,
   },
   headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 8,
+    ...CommonStyles.stackHeaderCenter,
   },
   headerTitle: {
-    ...Typography.Headline1,
-    color: Colors.TextPrimary,
-    fontWeight: '700',
+    ...CommonStyles.stackHeaderTitle,
   },
   headerSubtitle: {
-    ...Typography.Body2,
-    color: Colors.TextSecondary,
-    marginTop: 2,
+    ...CommonStyles.stackHeaderSubtitle,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.screenH,
-    paddingTop: Spacing.md,
+    ...CommonStyles.formScrollContent,
     paddingBottom: Spacing.md,
   },
+  premiumBannerWrap: {
+    marginBottom: Spacing.md,
+  },
   label: {
-    ...Typography.SectionLabel,
-    color: Colors.TextSecondary,
-    textTransform: 'uppercase',
+    ...CommonStyles.sectionLabel,
   },
   labelSpaced: {
-    marginTop: Spacing.md,
+    ...CommonStyles.sectionLabelSpaced,
     marginBottom: Spacing.sm,
   },
   inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 52,
-    backgroundColor: Colors.Background,
-    borderColor: Colors.DustyTaupe,
-    borderWidth: 1,
-    borderRadius: Shapes.Input,
-    paddingHorizontal: Spacing.md,
+    ...CommonStyles.inputWrapper,
   },
   inputIcon: {
-    marginRight: Spacing.sm,
+    ...CommonStyles.inputIcon,
   },
   input: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    ...Typography.Body1,
-    color: Colors.TextPrimary,
+    ...CommonStyles.input,
   },
   charCount: {
-    ...Typography.Micro,
-    color: Colors.TextSecondary,
-    textAlign: 'right',
-    marginTop: 4,
+    ...CommonStyles.charCount,
   },
   textAreaWrapper: {
-    alignItems: 'flex-start',
+    ...CommonStyles.textAreaWrapper,
   },
   textAreaIcon: {
-    marginTop: Spacing.md,
+    ...CommonStyles.textAreaIcon,
   },
   textArea: {
+    ...CommonStyles.textArea,
     minHeight: 100,
     textAlignVertical: 'top',
   },
@@ -714,11 +705,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   ctaContainer: {
-    paddingHorizontal: Spacing.screenH,
+    ...CommonStyles.ctaContainer,
     paddingVertical: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.BorderSubtle,
-    backgroundColor: Colors.Surface,
   },
   ctaButton: {
     borderRadius: Shapes.Button,

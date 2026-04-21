@@ -2,8 +2,16 @@ import { storage } from '@/storage/asyncStorage';
 import type { ActivityLog } from '@/types/models';
 import { generateUUID } from '@/stores/baseStore';
 import type { ActivityRepository } from '@/repositories/interfaces/activityRepository';
+import {
+  ActivityEditWindowExpiredError,
+  canEditActivityLog,
+} from '@/constants/featureLimits';
 
 const ACTIVITY_KEY = 'kaarma_activity_logs';
+
+export async function clearActivityLocalCache(): Promise<void> {
+  await storage.removeItem(ACTIVITY_KEY);
+}
 
 export const activityLocalRepository: ActivityRepository = {
   async getAllActivities() {
@@ -35,6 +43,9 @@ export const activityLocalRepository: ActivityRepository = {
     const entries = await this.getAllActivities();
     const idx = entries.findIndex((e) => e.id === id);
     if (idx === -1) return null;
+    if (!canEditActivityLog(entries[idx].loggedAt)) {
+      throw new ActivityEditWindowExpiredError();
+    }
     entries[idx] = { ...entries[idx], ...updates };
     await this.saveActivities(entries);
     return entries[idx];

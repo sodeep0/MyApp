@@ -11,10 +11,13 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
 import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
+import { useCountLimitedFeatureGate } from '@/hooks/useFeatureGate';
 import { safeBack } from '@/navigation/safeBack';
 import {
   addJournalEntry,
+  countJournalEntries,
   updateJournalEntry,
   getJournalEntryById,
   upsertJournalEntryForDate,
@@ -45,6 +48,9 @@ export default function JournalEntryScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
   const isEditing = !!id;
+  const journalGate = useCountLimitedFeatureGate('journalEntries', countJournalEntries, {
+    enabled: !isEditing,
+  });
 
   const [moodScore, setMoodScore] = useState(0);
   const [content, setContent] = useState('');
@@ -82,6 +88,7 @@ export default function JournalEntryScreen() {
 
   const triggerAutoSave = useCallback(() => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    if (!isEditing && journalGate.locked) return;
     if (moodScore === 0 || !content.trim()) return;
 
     autoSaveTimer.current = setTimeout(async () => {
@@ -111,7 +118,7 @@ export default function JournalEntryScreen() {
       }
       setSaving(false);
     }, 5000);
-  }, [moodScore, content, tags, isEditing, id]);
+  }, [moodScore, content, tags, isEditing, id, journalGate.locked]);
 
   useEffect(() => {
     triggerAutoSave();
@@ -149,6 +156,10 @@ export default function JournalEntryScreen() {
       Alert.alert('Write Something', 'Add some text to your journal entry.');
       return;
     }
+    if (!isEditing && journalGate.locked) {
+      router.push('/premium' as any);
+      return;
+    }
 
     const contentJson = JSON.stringify(content);
     setSaving(true);
@@ -182,7 +193,7 @@ export default function JournalEntryScreen() {
   };
 
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
-  const canSave = moodScore > 0 && content.trim().length > 0;
+  const canSave = moodScore > 0 && content.trim().length > 0 && !journalGate.locked;
   const currentPrompt = WRITING_PROMPTS[promptIndex];
 
   if (loading) {
@@ -219,6 +230,15 @@ export default function JournalEntryScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {!isEditing && journalGate.locked && (
+          <View style={styles.premiumBannerWrap}>
+            <PremiumLockedBanner
+              featureName={journalGate.featureName}
+              onUpgrade={() => router.push('/premium' as any)}
+            />
+          </View>
+        )}
+
         {/* Date */}
         <View style={styles.dateRow}>
           <Ionicons name="calendar-outline" size={16} color={Colors.TextSecondary} />
@@ -400,6 +420,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenH,
     paddingTop: 0,
     paddingBottom: Spacing.xl,
+  },
+  premiumBannerWrap: {
+    marginBottom: Spacing.md,
   },
   dateRow: {
     flexDirection: 'row',
