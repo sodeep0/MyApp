@@ -64,9 +64,17 @@ export default function JournalEntryScreen() {
   const [showPrompt, setShowPrompt] = useState(true);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = useRef(true);
   const hasLoadedInitialEntry = useRef(false);
   const lastSavedContent = useRef('');
   const lastSavedMood = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     hasLoadedInitialEntry.current = false;
@@ -128,6 +136,7 @@ export default function JournalEntryScreen() {
       const contentJson = JSON.stringify(content);
       if (contentJson === lastSavedContent.current && moodScore === lastSavedMood.current) return;
 
+      if (!mounted.current) return;
       setSaving(true);
       try {
         const today = new Date().toISOString().slice(0, 10);
@@ -149,7 +158,9 @@ export default function JournalEntryScreen() {
       } catch {
         // silent fail on auto-save
       }
-      setSaving(false);
+      if (mounted.current) {
+        setSaving(false);
+      }
     }, 5000);
   }, [moodScore, content, tags, isEditing, id, journalGate.locked]);
 

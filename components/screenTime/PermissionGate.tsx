@@ -11,6 +11,17 @@ interface PermissionGateProps {
 
 export default function PermissionGate({ onPermissionGranted }: PermissionGateProps) {
   const [requesting, setRequesting] = React.useState(false);
+  const retryTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = React.useRef(true);
+
+  React.useEffect(() => {
+    return () => {
+      mounted.current = false;
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current);
+      }
+    };
+  }, []);
 
   const handleEnable = async () => {
     setRequesting(true);
@@ -21,12 +32,18 @@ export default function PermissionGate({ onPermissionGranted }: PermissionGatePr
         onPermissionGranted();
         return;
       }
-      setTimeout(async () => {
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current);
+      }
+      retryTimer.current = setTimeout(async () => {
         const rechecked = await hasScreenTimePermission();
-        if (rechecked) onPermissionGranted();
+        if (mounted.current && rechecked) onPermissionGranted();
+        retryTimer.current = null;
       }, 2000);
     } finally {
-      setRequesting(false);
+      if (mounted.current) {
+        setRequesting(false);
+      }
     }
   };
 

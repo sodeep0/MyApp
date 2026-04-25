@@ -2,13 +2,9 @@
 import { Colors, Spacing, Typography } from "@/constants/theme";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
-import React from "react";
+import React, { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-Linking.addEventListener("url", (event) => {
-  console.log("🔗 Deep link received:", event.url);
-});
-
 console.log("🟢 Auth screen module loaded");
 WebBrowser.maybeCompleteAuthSession();
 
@@ -16,6 +12,16 @@ export default function AuthCallbackScreen() {
   console.log("🟡 Auth screen component mounted");
 
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener("url", (event) => {
+      console.log("🔗 Deep link received:", event.url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   return (
     <View
