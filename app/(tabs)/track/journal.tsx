@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   TextInput,
+  InteractionManager,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -78,10 +79,13 @@ export default function JournalListScreen() {
         setLoading(false);
       };
 
-      ensureAccessAndLoad();
+      const task = InteractionManager.runAfterInteractions(() => {
+        void ensureAccessAndLoad();
+      });
 
       return () => {
         isActive = false;
+        task.cancel();
       };
     }, [loadData, router]),
   );

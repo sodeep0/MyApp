@@ -26,6 +26,7 @@ import React, { Component, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  InteractionManager,
   Platform,
   Pressable,
   ScrollView,
@@ -484,7 +485,15 @@ function ScreenTimeContent() {
 
   useFocusEffect(
     React.useCallback(() => {
-      if (!useDemoData) loadData();
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (!useDemoData) {
+          void loadData();
+        }
+      });
+
+      return () => {
+        task.cancel();
+      };
     }, [loadData, useDemoData]),
   );
 

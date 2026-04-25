@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, InteractionManager } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -167,7 +167,13 @@ export default function TrackHubScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadRecent();
+      const task = InteractionManager.runAfterInteractions(() => {
+        void loadRecent();
+      });
+
+      return () => {
+        task.cancel();
+      };
     }, [loadRecent]),
   );
 

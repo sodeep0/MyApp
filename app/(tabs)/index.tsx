@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
+  InteractionManager,
   Modal,
   Pressable,
   ScrollView,
@@ -299,8 +300,14 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadAllData();
-      return () => setShowFAB(false);
+      const task = InteractionManager.runAfterInteractions(() => {
+        void loadAllData();
+      });
+
+      return () => {
+        task.cancel();
+        setShowFAB(false);
+      };
     }, []),
   );
 

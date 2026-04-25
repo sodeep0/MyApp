@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  InteractionManager,
   Platform,
   Pressable,
   ScrollView,
@@ -88,7 +89,13 @@ export default function ManageAppLimitsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void loadTrackedApps();
+      const task = InteractionManager.runAfterInteractions(() => {
+        void loadTrackedApps();
+      });
+
+      return () => {
+        task.cancel();
+      };
     }, [loadTrackedApps]),
   );
 

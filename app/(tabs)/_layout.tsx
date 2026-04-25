@@ -117,6 +117,7 @@ export default function TabsLayout() {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        lazy: true,
         tabBarStyle: {
           backgroundColor: "transparent",
           borderTopWidth: 0,
@@ -125,14 +126,11 @@ export default function TabsLayout() {
         },
       }}
     >
-      <Tabs.Screen name="index" options={{ unmountOnBlur: true } as any} />
-      <Tabs.Screen name="habits" options={{ unmountOnBlur: true } as any} />
-      <Tabs.Screen name="track" options={{ unmountOnBlur: true } as any} />
-      <Tabs.Screen name="goals" options={{ unmountOnBlur: true } as any} />
-      <Tabs.Screen
-        name="screen-time"
-        options={{ unmountOnBlur: true } as any}
-      />
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="habits" />
+      <Tabs.Screen name="track" />
+      <Tabs.Screen name="goals" />
+      <Tabs.Screen name="screen-time" />
     </Tabs>
   );
 }
