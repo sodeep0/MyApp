@@ -35,7 +35,7 @@ const VARIANT_COLORS: Record<ButtonVariant, { bg: string; text: string }> = {
   danger: { bg: Colors.Danger, text: Colors.Surface },
 };
 
-export function Button({
+function ButtonComponent({
   label,
   onPress,
   variant = 'primary',
@@ -101,7 +101,7 @@ interface FABProps {
   disabled?: boolean;
 }
 
-export function FAB({ icon, onPress, disabled = false }: FABProps) {
+function FABComponent({ icon, onPress, disabled = false }: FABProps) {
   return (
     <Pressable
       onPress={onPress}
@@ -116,6 +116,9 @@ export function FAB({ icon, onPress, disabled = false }: FABProps) {
     </Pressable>
   );
 }
+
+export const Button = React.memo(ButtonComponent);
+export const FAB = React.memo(FABComponent);
 
 const styles = StyleSheet.create({
   container: {

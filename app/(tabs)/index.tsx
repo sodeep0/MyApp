@@ -143,6 +143,146 @@ const QUICK_ACTIONS = [
   },
 ];
 
+const goalKeyExtractor = (goal: Goal) => goal.id;
+const badHabitKeyExtractor = (habit: BadHabit) => habit.id;
+
+type HomeGoalCardProps = {
+  goal: Goal;
+  onPress: (goalId: string) => void;
+};
+
+const HomeGoalCard = React.memo(function HomeGoalCard({
+  goal,
+  onPress,
+}: HomeGoalCardProps) {
+  const progress = getGoalProgress(goal);
+  const progressPct = Math.round(progress * 100);
+  const accent = getGoalAccent(goal);
+
+  return (
+    <Pressable
+      onPress={() => onPress(goal.id)}
+      style={({ pressed }) => [
+        styles.goalCard,
+        { transform: [{ scale: pressed ? 0.99 : 1 }] },
+      ]}
+    >
+      <View style={styles.goalCardTop}>
+        <Text style={styles.goalEmoji}>{getGoalEmoji(goal)}</Text>
+        <View style={[styles.goalProgressPill, { backgroundColor: accent + "1F" }]}>
+          <Text style={[styles.goalProgressPillText, { color: accent }]}>
+            {progressPct}% complete
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.goalTitle} numberOfLines={2}>
+        {goal.title || "Untitled Goal"}
+      </Text>
+
+      <Text style={styles.goalDate}>
+        {goal.targetDate
+          ? `Deadline: ${new Date(goal.targetDate).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })}`
+          : "Open-ended goal"}
+      </Text>
+
+      <View style={styles.goalBarTrack}>
+        <View
+          style={[
+            styles.goalBarFill,
+            {
+              width: `${Math.max(progressPct, 4)}%`,
+              backgroundColor: accent,
+            },
+          ]}
+        />
+      </View>
+    </Pressable>
+  );
+});
+
+type HomeBadHabitCardProps = {
+  badHabit: BadHabit;
+  relapsed: boolean;
+  onPress: (badHabitId: string) => void;
+};
+
+const HomeBadHabitCard = React.memo(function HomeBadHabitCard({
+  badHabit,
+  relapsed,
+  onPress,
+}: HomeBadHabitCardProps) {
+  const daysClean = daysSinceQuit(badHabit.quitDate);
+  const progressPct = Math.round(Math.max(0, Math.min(daysClean / 7, 1)) * 100);
+  const accent = getBadHabitAccent(badHabit.category);
+
+  return (
+    <Pressable
+      onPress={() => onPress(badHabit.id)}
+      style={({ pressed }) => [
+        styles.badHabitCard,
+        { transform: [{ scale: pressed ? 0.99 : 1 }] },
+      ]}
+    >
+      <View style={styles.badHabitCardTop}>
+        <View style={[styles.badHabitIconBox, { backgroundColor: accent + "14" }]}>
+          <Ionicons name="warning-outline" size={20} color={accent} />
+        </View>
+        <View
+          style={[
+            styles.badHabitMetaPill,
+            {
+              backgroundColor: relapsed
+                ? Colors.Danger + "16"
+                : Colors.Success + "16",
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.badHabitMetaPillText,
+              { color: relapsed ? Colors.Danger : Colors.Success },
+            ]}
+          >
+            {relapsed ? "Relapse logged" : `${daysClean} clean days`}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.badHabitTitle} numberOfLines={2}>
+        {badHabit.name || "Untitled habit"}
+      </Text>
+
+      <Text style={styles.badHabitCaption}>
+        {getBadHabitCategoryLabel(badHabit.category)} · {getBadHabitSeverityLabel(badHabit.severity)}
+      </Text>
+
+      <Text style={styles.badHabitDate}>
+        Since{" "}
+        {new Date(badHabit.quitDate).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })}
+      </Text>
+
+      <View style={styles.badHabitBarTrack}>
+        <View
+          style={[
+            styles.badHabitBarFill,
+            {
+              width: `${Math.max(progressPct, 4)}%`,
+              backgroundColor: relapsed ? Colors.Danger : accent,
+            },
+          ]}
+        />
+      </View>
+    </Pressable>
+  );
+});
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -214,9 +354,14 @@ export default function HomeScreen() {
 
   const completedCount = todayDone.size;
   const totalHabits = habits.length;
-  const activeGoals = goals.filter((g) => g.status === "ACTIVE");
-  const maxStreak =
-    Object.values(streaks).length > 0 ? Math.max(...Object.values(streaks)) : 0;
+  const activeGoals = useMemo(
+    () => goals.filter((goal) => goal.status === "ACTIVE"),
+    [goals],
+  );
+  const maxStreak = useMemo(() => {
+    const values = Object.values(streaks);
+    return values.length > 0 ? Math.max(...values) : 0;
+  }, [streaks]);
   const displayNameStr = String(displayName).split(" ")[0] || "User";
 
   const dailyScore = useMemo(() => {
@@ -233,12 +378,20 @@ export default function HomeScreen() {
     );
   }, [activeGoals, completedCount, maxStreak, totalHabits]);
 
-  const topHabits = [...habits]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 3);
-  const topBadHabits = [...badHabits]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 5);
+  const topHabits = useMemo(
+    () =>
+      [...habits]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 3),
+    [habits],
+  );
+  const topBadHabits = useMemo(
+    () =>
+      [...badHabits]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 5),
+    [badHabits],
+  );
 
   const toggleComplete = async (habitId: string) => {
     if (todayDone.has(habitId)) {
@@ -279,6 +432,38 @@ export default function HomeScreen() {
 
     router.push(route as any);
   };
+
+  const handleGoalPress = useCallback(
+    (goalId: string) => {
+      router.push(`/goals/detail?id=${goalId}` as any);
+    },
+    [router],
+  );
+
+  const handleBadHabitPress = useCallback(
+    (badHabitId: string) => {
+      router.push(`/track/bad-habit-detail?id=${badHabitId}` as any);
+    },
+    [router],
+  );
+
+  const renderGoalItem = useCallback(
+    ({ item }: { item: Goal }) => (
+      <HomeGoalCard goal={item} onPress={handleGoalPress} />
+    ),
+    [handleGoalPress],
+  );
+
+  const renderBadHabitItem = useCallback(
+    ({ item }: { item: BadHabit }) => (
+      <HomeBadHabitCard
+        badHabit={item}
+        relapsed={relapsedBadHabitIds.has(item.id)}
+        onPress={handleBadHabitPress}
+      />
+    ),
+    [handleBadHabitPress, relapsedBadHabitIds],
+  );
 
   if (loading) {
     return (
@@ -466,60 +651,14 @@ export default function HomeScreen() {
               data={activeGoals}
               horizontal
               nestedScrollEnabled
-              keyExtractor={(goal) => goal.id}
+              keyExtractor={goalKeyExtractor}
               contentContainerStyle={styles.goalListContent}
+              initialNumToRender={3}
+              maxToRenderPerBatch={4}
+              windowSize={5}
+              removeClippedSubviews
               showsHorizontalScrollIndicator={false}
-              renderItem={({ item: goal }) => {
-                const progress = getGoalProgress(goal);
-                const progressPct = Math.round(progress * 100);
-                const accent = getGoalAccent(goal);
-
-                return (
-                  <Pressable
-                    onPress={() => router.push(`/goals/detail?id=${goal.id}` as any)}
-                    style={({ pressed }) => [
-                      styles.goalCard,
-                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
-                    ]}
-                  >
-                    <View style={styles.goalCardTop}>
-                      <Text style={styles.goalEmoji}>{getGoalEmoji(goal)}</Text>
-                      <View
-                        style={[styles.goalProgressPill, { backgroundColor: accent + "1F" }]}
-                      >
-                        <Text style={[styles.goalProgressPillText, { color: accent }]}>
-                          {progressPct}% complete
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.goalTitle} numberOfLines={2}>
-                      {goal.title || "Untitled Goal"}
-                    </Text>
-
-                    <Text style={styles.goalDate}>
-                      {goal.targetDate
-                        ? `Deadline: ${new Date(goal.targetDate).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })}`
-                        : "Open-ended goal"}
-                    </Text>
-
-                    <View style={styles.goalBarTrack}>
-                      <View
-                        style={[
-                          styles.goalBarFill,
-                          {
-                            width: `${Math.max(progressPct, 4)}%`,
-                            backgroundColor: accent,
-                          },
-                        ]}
-                      />
-                    </View>
-                  </Pressable>
-                );
-              }}
+              renderItem={renderGoalItem}
             />
           )}
         </View>
@@ -543,80 +682,14 @@ export default function HomeScreen() {
               data={topBadHabits}
               horizontal
               nestedScrollEnabled
-              keyExtractor={(habit) => habit.id}
+              keyExtractor={badHabitKeyExtractor}
               contentContainerStyle={styles.badHabitListContent}
+              initialNumToRender={3}
+              maxToRenderPerBatch={4}
+              windowSize={5}
+              removeClippedSubviews
               showsHorizontalScrollIndicator={false}
-              renderItem={({ item: badHabit }) => {
-                const daysClean = daysSinceQuit(badHabit.quitDate);
-                const relapsed = relapsedBadHabitIds.has(badHabit.id);
-                const progressPct = Math.round(Math.max(0, Math.min(daysClean / 7, 1)) * 100);
-                const accent = getBadHabitAccent(badHabit.category);
-
-                return (
-                  <Pressable
-                    onPress={() =>
-                      router.push(`/track/bad-habit-detail?id=${badHabit.id}` as any)
-                    }
-                    style={({ pressed }) => [
-                      styles.badHabitCard,
-                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
-                    ]}
-                  >
-                    <View style={styles.badHabitCardTop}>
-                      <View style={[styles.badHabitIconBox, { backgroundColor: accent + "14" }]}>
-                        <Ionicons name="warning-outline" size={20} color={accent} />
-                      </View>
-                      <View
-                        style={[
-                          styles.badHabitMetaPill,
-                          {
-                            backgroundColor: relapsed
-                              ? Colors.Danger + "16"
-                              : Colors.Success + "16",
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.badHabitMetaPillText,
-                            { color: relapsed ? Colors.Danger : Colors.Success },
-                          ]}
-                        >
-                          {relapsed ? "Relapse logged" : `${daysClean} clean days`}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.badHabitTitle} numberOfLines={2}>
-                      {badHabit.name || "Untitled habit"}
-                    </Text>
-
-                    <Text style={styles.badHabitCaption}>
-                      {getBadHabitCategoryLabel(badHabit.category)} · {getBadHabitSeverityLabel(badHabit.severity)}
-                    </Text>
-
-                    <Text style={styles.badHabitDate}>
-                      Since{" "}
-                      {new Date(badHabit.quitDate).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </Text>
-
-                    <View style={styles.badHabitBarTrack}>
-                      <View
-                        style={[
-                          styles.badHabitBarFill,
-                          {
-                            width: `${Math.max(progressPct, 4)}%`,
-                            backgroundColor: relapsed ? Colors.Danger : accent,
-                          },
-                        ]}
-                      />
-                    </View>
-                  </Pressable>
-                );
-              }}
+              renderItem={renderBadHabitItem}
             />
           )}
         </View>

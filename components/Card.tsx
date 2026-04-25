@@ -12,7 +12,7 @@ interface CardProps {
   heroGradient?: 'blue' | 'warm';
 }
 
-export function Card({
+function CardComponent({
   children,
   style,
   padding = Spacing.md,
@@ -55,6 +55,8 @@ export function Card({
     </View>
   );
 }
+
+export const Card = React.memo(CardComponent);
 
 const styles = StyleSheet.create({
   container: {

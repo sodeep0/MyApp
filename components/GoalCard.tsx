@@ -44,7 +44,7 @@ interface GoalCardProps {
   style?: StyleProp<ViewStyle>;
 }
 
-export function GoalCard({ goal, onPress, style }: GoalCardProps) {
+function GoalCardComponent({ goal, onPress, style }: GoalCardProps) {
   const category = goal.category || GoalCategory.PERSONAL;
   const categoryColor = CATEGORY_COLORS[category];
   const categoryLabel = category.charAt(0) + category.slice(1).toLowerCase();
@@ -208,6 +208,8 @@ export function GoalCard({ goal, onPress, style }: GoalCardProps) {
     </Pressable>
   );
 }
+
+export const GoalCard = React.memo(GoalCardComponent);
 
 function calculateProgress(goal: Partial<Goal>): number {
   if (goal.goalType === GoalType.QUANTITATIVE && goal.targetValue) {

@@ -16,7 +16,7 @@ interface HabitCardProps {
   stats?: { label: string; value: string }[];
 }
 
-export function HabitCard({
+function HabitCardComponent({
   habit,
   completed = false,
   streak = 0,
@@ -98,7 +98,7 @@ export function HabitCard({
   );
 }
 
-export function AddHabitRow({ onPress }: { onPress: () => void }) {
+function AddHabitRowComponent({ onPress }: { onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
@@ -109,6 +109,9 @@ export function AddHabitRow({ onPress }: { onPress: () => void }) {
     </Pressable>
   );
 }
+
+export const HabitCard = React.memo(HabitCardComponent);
+export const AddHabitRow = React.memo(AddHabitRowComponent);
 
 const styles = StyleSheet.create({
   container: {
