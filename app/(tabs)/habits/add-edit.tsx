@@ -1,4 +1,5 @@
 import { Button } from "@/components/Button";
+import { LoadingState } from "@/components/LoadingState";
 import { CommonStyles } from "@/constants/commonStyles";
 import { Colors, Shapes, Spacing, Typography } from "@/constants/theme";
 import { safeBack } from "@/navigation/safeBack";
@@ -233,6 +234,16 @@ export default function AddEditHabitScreen() {
       setIsSaving(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <LoadingState
+        fullScreen
+        title="Loading Habit"
+        message="Preparing your habit details for editing."
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>

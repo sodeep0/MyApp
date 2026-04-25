@@ -19,14 +19,16 @@ What works today:
 - Google sign-in with Firebase
 - habits, goals, journal, bad habits, and activity logging with persisted data
 - profile/settings shell
+- Privacy & Security settings screen with journal-lock controls
 - premium upsell flow with mock subscription state
 - Android-first screen-time dashboard groundwork
 - repository-based local/cloud architecture for profile, habits, goals, and activities
+- encrypted local persistence for sensitive local modules (journal, bad habits, urge events)
 
 What is still incomplete:
 
 - premium enforcement
-- encrypted storage for sensitive modules
+- hardened key lifecycle/recovery strategy for encryption
 - notifications
 - export/delete/privacy tooling
 - release hardening and test coverage
@@ -119,6 +121,7 @@ npm run firebase:indexes:deploy
 
 - [progress.md](./progress.md)
 - [requirements.md](./requirements.md)
+- [flow-control.md](./flow-control.md)
 - [AGENTS.md](./AGENTS.md)
 - [docs/data-policy.md](./docs/data-policy.md)
 - [docs/firestore-schema.md](./docs/firestore-schema.md)

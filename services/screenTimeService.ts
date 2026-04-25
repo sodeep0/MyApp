@@ -81,6 +81,13 @@ export interface WeeklyReport {
   weekTotalMs: number;
 }
 
+type AppCatalog = {
+  appNameMap: Map<string, string>;
+  launchablePackages: Set<string>;
+};
+
+type AggregateMode = 'sum' | 'max';
+
 /** Format milliseconds to "Xh Ym" */
 export function formatMs(ms: number): string {
   const totalMin = Math.round(ms / 60000);
@@ -103,15 +110,89 @@ function dayEndTs(dayOffset: number = 0): number {
   return d.getTime();
 }
 
-async function buildAppNameMap(): Promise<Map<string, string>> {
+async function buildAppCatalog(): Promise<AppCatalog> {
   const mod = await getNativeModule();
-  if (!mod) return new Map();
+  if (!mod) {
+    return {
+      appNameMap: new Map(),
+      launchablePackages: new Set(),
+    };
+  }
+
+  const appNameMap = new Map<string, string>();
+  const launchablePackages = new Set<string>();
+
   try {
     const apps = await mod.getInstalledApps();
-    return new Map(apps.map((a: AppInfo) => [a.packageName, a.appName || a.packageName]));
+    for (const app of apps as Array<AppInfo | string>) {
+      if (typeof app === 'string') {
+        const packageName = app;
+        launchablePackages.add(packageName);
+        const fallbackName = packageName.split('.').pop() || packageName;
+        appNameMap.set(packageName, fallbackName);
+        continue;
+      }
+
+      if (!app?.packageName) continue;
+      const packageName = app.packageName;
+      launchablePackages.add(packageName);
+      appNameMap.set(
+        packageName,
+        app.appName?.trim() || packageName.split('.').pop() || packageName,
+      );
+    }
   } catch {
-    return new Map();
+    // Ignore and fall back to unfiltered usage stats.
   }
+
+  return { appNameMap, launchablePackages };
+}
+
+function shouldIncludePackage(
+  packageName: string,
+  launchablePackages: Set<string>,
+): boolean {
+  if (!packageName) return false;
+  if (packageName === 'android') return false;
+  if (launchablePackages.size === 0) return true;
+  return launchablePackages.has(packageName);
+}
+
+function aggregateUsageStats(
+  stats: UsageStats[],
+  launchablePackages: Set<string>,
+  mode: AggregateMode,
+): UsageStats[] {
+  const byPackage = new Map<string, UsageStats>();
+
+  for (const stat of stats) {
+    if (!stat || stat.totalTimeInForeground <= 0) continue;
+    if (!shouldIncludePackage(stat.packageName, launchablePackages)) continue;
+
+    const existing = byPackage.get(stat.packageName);
+    if (!existing) {
+      byPackage.set(stat.packageName, {
+        packageName: stat.packageName,
+        totalTimeInForeground: stat.totalTimeInForeground,
+        lastTimeStamp: stat.lastTimeStamp,
+      });
+      continue;
+    }
+
+    existing.lastTimeStamp = Math.max(existing.lastTimeStamp || 0, stat.lastTimeStamp || 0);
+    if (mode === 'sum') {
+      existing.totalTimeInForeground += stat.totalTimeInForeground;
+    } else {
+      existing.totalTimeInForeground = Math.max(
+        existing.totalTimeInForeground,
+        stat.totalTimeInForeground,
+      );
+    }
+  }
+
+  return Array.from(byPackage.values()).sort(
+    (a, b) => b.totalTimeInForeground - a.totalTimeInForeground,
+  );
 }
 
 export async function hasScreenTimePermission(): Promise<boolean> {
@@ -145,15 +226,18 @@ export async function getScreenTimeReport(
     const endTime = period === 'today' ? dayEndTs() : dayEndTs();
 
     const rawStats: UsageStats[] = await mod.getUsageStats(startTime, endTime);
-    const appNameMap = await buildAppNameMap();
-
-    const filtered = rawStats
-      .filter((s: UsageStats) => s.totalTimeInForeground > 0)
-      .sort((a: UsageStats, b: UsageStats) => b.totalTimeInForeground - a.totalTimeInForeground);
+    const { appNameMap, launchablePackages } = await buildAppCatalog();
+    const aggregateMode: AggregateMode = period === 'today' ? 'max' : 'sum';
+    const aggregated = aggregateUsageStats(rawStats, launchablePackages, aggregateMode);
 
     const limits = await storage.getItem<Record<string, number>>(APP_LIMITS_KEY, {});
 
-    const apps: AppUsage[] = filtered.map((stat: UsageStats) => {
+    const totalMs = aggregated.reduce(
+      (sum: number, stat: UsageStats) => sum + stat.totalTimeInForeground,
+      0,
+    );
+
+    const apps: AppUsage[] = aggregated.map((stat: UsageStats) => {
       const appName = appNameMap.get(stat.packageName) || stat.packageName.split('.').pop() || stat.packageName;
       return {
         packageName: stat.packageName,
@@ -164,7 +248,6 @@ export async function getScreenTimeReport(
       };
     }).slice(0, 20);
 
-    const totalMs = apps.reduce((sum: number, a: AppUsage) => sum + a.totalTimeMs, 0);
     const hourBreakdown = await getHourBreakdown(startTime, endTime);
 
     return { totalMs, apps, hourBreakdown };
@@ -179,6 +262,7 @@ export async function getWeeklyReport(): Promise<WeeklyReport | null> {
   if (!mod) return null;
 
   try {
+    const { launchablePackages } = await buildAppCatalog();
     const dailyTotals: { date: string; totalMs: number }[] = [];
     let weekTotalMs = 0;
 
@@ -186,7 +270,11 @@ export async function getWeeklyReport(): Promise<WeeklyReport | null> {
       const start = dayStartTs(-i);
       const end = dayEndTs(-i);
       const stats: UsageStats[] = await mod.getUsageStats(start, end);
-      const dayTotal = stats.reduce((sum: number, s: UsageStats) => sum + s.totalTimeInForeground, 0);
+      const dayAggregated = aggregateUsageStats(stats, launchablePackages, 'max');
+      const dayTotal = dayAggregated.reduce(
+        (sum: number, s: UsageStats) => sum + s.totalTimeInForeground,
+        0,
+      );
       const date = new Date(start).toISOString().slice(0, 10);
       dailyTotals.push({ date, totalMs: dayTotal });
       weekTotalMs += dayTotal;

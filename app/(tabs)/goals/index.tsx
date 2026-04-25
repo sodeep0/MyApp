@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LoadingState } from '@/components/LoadingState';
 import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
 import { CommonStyles } from '@/constants/commonStyles';
 import { getCountLimitedFeatureGate } from '@/constants/featureLimits';
@@ -36,10 +37,16 @@ export default function GoalListScreen() {
   const { isPremium } = useSubscription();
   const [activeTab, setActiveTab] = useState<FilterTab>(GoalStatus.ACTIVE);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
-    const data = await getAllGoals();
-    setGoals(data);
+    setLoading(true);
+    try {
+      const data = await getAllGoals();
+      setGoals(data);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -60,6 +67,16 @@ export default function GoalListScreen() {
 
     router.push('/(tabs)/goals/add-edit' as any);
   };
+
+  if (loading) {
+    return (
+      <LoadingState
+        fullScreen
+        title="Loading Goals"
+        message="Collecting your active targets and finished wins."
+      />
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

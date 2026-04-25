@@ -3,11 +3,15 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LoadingState } from '@/components/LoadingState';
 import { CommonStyles } from '@/constants/commonStyles';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { navigateWithJournalAccess } from '@/services/journalGate';
+import { isJournalSessionUnlocked } from '@/services/journalSecurity';
 import { getAllUrgeEvents, getAllBadHabits } from '@/stores/badHabitStore';
 import { getAllActivities } from '@/stores/activityStore';
 import { getAllJournalEntries } from '@/stores/journalStore';
+import { getSecuritySettings } from '@/stores/securityStore';
 
 function getDateString() {
   return new Date().toLocaleDateString('en-US', {
@@ -91,63 +95,74 @@ export default function TrackHubScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadRecent = useCallback(async () => {
-    const [urgeEvents, badHabits, activities, journals] = await Promise.all([
-      getAllUrgeEvents(),
-      getAllBadHabits(),
-      getAllActivities(),
-      getAllJournalEntries(),
-    ]);
+    setLoading(true);
 
-    const badHabitNameById = new Map(badHabits.map((h) => [h.id, h.name]));
+    try {
+      const [urgeEvents, badHabits, activities, securitySettings] = await Promise.all([
+        getAllUrgeEvents(),
+        getAllBadHabits(),
+        getAllActivities(),
+        getSecuritySettings(),
+      ]);
 
-    const recentBadHabitItems: RecentItem[] = urgeEvents.map((event) => {
-      const habitName = badHabitNameById.get(event.badHabitId) || 'Bad Habit';
-      const action = event.type === 'RELAPSE' ? 'Relapse logged' : 'Urge resisted';
-      return {
-        id: `bh-${event.id}`,
-        type: 'BAD_HABIT',
-        title: habitName,
-        subtitle: action,
-        timestamp: event.loggedAt,
-        route: `/track/bad-habit-detail?id=${event.badHabitId}`,
-      };
-    });
+      const shouldShowJournalItems =
+        !securitySettings.journalLockEnabled || isJournalSessionUnlocked();
+      const journals = shouldShowJournalItems ? await getAllJournalEntries() : [];
 
-    const recentActivityItems: RecentItem[] = activities.map((activity) => ({
-      id: `ac-${activity.id}`,
-      type: 'ACTIVITY',
-      title: activity.name,
-      subtitle: `${activity.durationMinutes} min - ${activity.category.toLowerCase()}`,
-      timestamp: activity.loggedAt,
-      route: `/track/log-activity?id=${activity.id}`,
-    }));
+      const badHabitNameById = new Map(badHabits.map((h) => [h.id, h.name]));
 
-    const recentJournalItems: RecentItem[] = journals.map((entry) => {
-      let preview = '';
-      try {
-        const parsed = JSON.parse(entry.contentJson);
-        preview = typeof parsed === 'string' ? parsed : '';
-      } catch {
-        preview = entry.contentJson;
-      }
-      const cleaned = preview.trim();
-      return {
-        id: `jr-${entry.id}`,
-        type: 'JOURNAL',
-        title: cleaned ? cleaned.slice(0, 36) : 'Journal Entry',
-        subtitle: entry.tags.length > 0 ? entry.tags.slice(0, 2).join(', ') : 'No tags',
-        timestamp: entry.updatedAt || `${entry.date}T00:00:00.000Z`,
-        route: `/track/journal-entry?id=${entry.id}`,
-      };
-    });
+      const recentBadHabitItems: RecentItem[] = urgeEvents.map((event) => {
+        const habitName = badHabitNameById.get(event.badHabitId) || 'Bad Habit';
+        const action = event.type === 'RELAPSE' ? 'Relapse logged' : 'Urge resisted';
+        return {
+          id: `bh-${event.id}`,
+          type: 'BAD_HABIT',
+          title: habitName,
+          subtitle: action,
+          timestamp: event.loggedAt,
+          route: `/track/bad-habit-detail?id=${event.badHabitId}`,
+        };
+      });
 
-    const merged = [...recentBadHabitItems, ...recentActivityItems, ...recentJournalItems]
-      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-      .slice(0, 3);
+      const recentActivityItems: RecentItem[] = activities.map((activity) => ({
+        id: `ac-${activity.id}`,
+        type: 'ACTIVITY',
+        title: activity.name,
+        subtitle: `${activity.durationMinutes} min - ${activity.category.toLowerCase()}`,
+        timestamp: activity.loggedAt,
+        route: `/track/log-activity?id=${activity.id}`,
+      }));
 
-    setRecentItems(merged);
+      const recentJournalItems: RecentItem[] = journals.map((entry) => {
+        let preview = '';
+        try {
+          const parsed = JSON.parse(entry.contentJson);
+          preview = typeof parsed === 'string' ? parsed : '';
+        } catch {
+          preview = entry.contentJson;
+        }
+        const cleaned = preview.trim();
+        return {
+          id: `jr-${entry.id}`,
+          type: 'JOURNAL',
+          title: cleaned ? cleaned.slice(0, 36) : 'Journal Entry',
+          subtitle: entry.tags.length > 0 ? entry.tags.slice(0, 2).join(', ') : 'No tags',
+          timestamp: entry.updatedAt || `${entry.date}T00:00:00.000Z`,
+          route: `/track/journal-entry?id=${entry.id}`,
+        };
+      });
+
+      const merged = [...recentBadHabitItems, ...recentActivityItems, ...recentJournalItems]
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, 3);
+
+      setRecentItems(merged);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -155,6 +170,29 @@ export default function TrackHubScreen() {
       loadRecent();
     }, [loadRecent]),
   );
+
+  const handleOpenJournal = () => {
+    void navigateWithJournalAccess(router, '/track/journal');
+  };
+
+  const handleOpenRecentItem = (item: RecentItem) => {
+    if (item.type === 'JOURNAL') {
+      void navigateWithJournalAccess(router, item.route);
+      return;
+    }
+
+    router.push(item.route as any);
+  };
+
+  if (loading) {
+    return (
+      <LoadingState
+        fullScreen
+        title="Loading Track"
+        message="Pulling together your private tracking and recent activity."
+      />
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -182,7 +220,7 @@ export default function TrackHubScreen() {
             title="Journal"
             description="Daily reflections with mood tracking"
             color={Colors.SteelBlue}
-            onPress={() => router.push('/track/journal' as any)}
+            onPress={handleOpenJournal}
           />
           <ModuleCard
             icon="bar-chart-outline"
@@ -202,7 +240,7 @@ export default function TrackHubScreen() {
                 return (
                   <Pressable
                     key={item.id}
-                    onPress={() => router.push(item.route as any)}
+                    onPress={() => handleOpenRecentItem(item)}
                     style={({ pressed }) => [
                       styles.recentCard,
                       { opacity: pressed ? 0.8 : 1 },

@@ -56,6 +56,7 @@ export function Button({
         isOutline && styles.secondaryOutline,
         fullWidth && styles.fullWidth,
         disabled && styles.disabled,
+        pressed && !disabled && styles.pressed,
         pressed && !disabled && {
           backgroundColor: isOutline
             ? Colors.SteelBlue + '12'
@@ -108,7 +109,7 @@ export function FAB({ icon, onPress, disabled = false }: FABProps) {
       style={({ pressed }) => [
         styles.fab,
         disabled && styles.disabled,
-        pressed && !disabled && { opacity: 0.85 },
+        pressed && !disabled && styles.pressed,
       ]}
     >
       <Ionicons name={icon} size={24} color={Colors.Surface} />
@@ -126,15 +127,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   secondaryOutline: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: Colors.SteelBlue,
-    backgroundColor: 'transparent',
+    backgroundColor: Colors.Surface,
   },
   fullWidth: {
     width: '100%',
   },
   disabled: {
     opacity: 0.4,
+  },
+  pressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.96 }],
   },
   labelRow: {
     flexDirection: 'row',

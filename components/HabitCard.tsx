@@ -64,7 +64,10 @@ export function HabitCard({
         <Pressable
           onPress={onToggle}
           hitSlop={8}
-          style={({ pressed }) => [styles.checkBtn, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
+          style={({ pressed }) => [
+            styles.checkBtn,
+            { transform: [{ scale: pressed ? 0.96 : 1 }] },
+          ]}
         >
           <Ionicons
             name={completed ? 'checkmark-circle' : 'ellipse-outline'}
@@ -112,7 +115,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.Surface,
     borderRadius: Shapes.Card,
     borderColor: Colors.BorderSubtle,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderLeftWidth: 4,
     borderLeftColor: Colors.SteelBlue,
     padding: Spacing.md,
@@ -181,9 +184,14 @@ const styles = StyleSheet.create({
     color: Colors.Surface,
     fontWeight: '700',
     letterSpacing: 0.8,
+    fontVariant: ['tabular-nums'],
   },
   checkBtn: {
-    padding: 2,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   atRiskBadge: {
     flexDirection: 'row',
@@ -218,6 +226,7 @@ const styles = StyleSheet.create({
   statValue: {
     ...Typography.Headline2,
     color: Colors.TextPrimary,
+    fontVariant: ['tabular-nums'],
   },
   statLabel: {
     ...Typography.Caption,

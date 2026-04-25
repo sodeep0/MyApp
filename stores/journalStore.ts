@@ -1,12 +1,18 @@
 // Journal entry store (local-only by policy; never sync to Firebase)
 import type { JournalEntry } from '../types/models';
 import { generateUUID } from './baseStore';
+import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
+import { getSensitiveItem, setSensitiveItem } from '@/storage/secureDataStorage';
 
 const JOURNAL_KEY = 'kaarma_journal_entries';
+const JOURNAL_SECURE_KEY = 'kaarma_secure_journal_entries_v1';
 
 export async function getAllJournalEntries(): Promise<JournalEntry[]> {
-  const { storage } = await import('../storage/asyncStorage');
-  const entries = (await storage.getItem<JournalEntry[]>(JOURNAL_KEY)) ?? [];
+  const entries = await getSensitiveItem<JournalEntry[]>({
+    secureKey: JOURNAL_SECURE_KEY,
+    legacyKey: JOURNAL_KEY,
+    defaultValue: [],
+  });
   return entries.sort((a, b) => b.date.localeCompare(a.date));
 }
 
@@ -22,13 +28,18 @@ export async function getJournalEntriesByDate(date: string): Promise<JournalEntr
 }
 
 export async function saveJournalEntries(entries: JournalEntry[]): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  await storage.setItem(JOURNAL_KEY, entries);
+  await setSensitiveItem({
+    secureKey: JOURNAL_SECURE_KEY,
+    legacyKey: JOURNAL_KEY,
+    value: entries,
+  });
 }
 
 export async function addJournalEntry(
   data: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<JournalEntry> {
+  await enforceCountLimitedFeatureGate('journalEntries', countJournalEntries);
+
   const entries = await getAllJournalEntries();
   const now = new Date().toISOString();
   const entry: JournalEntry = {

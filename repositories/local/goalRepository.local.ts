@@ -3,6 +3,7 @@ import { GoalStatus } from '@/types/models';
 import { storage } from '@/storage/asyncStorage';
 import { generateUUID } from '@/stores/baseStore';
 import type { GoalRepository } from '@/repositories/interfaces/goalRepository';
+import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
 
 const GOALS_KEY = 'kaarma_goals';
 
@@ -25,6 +26,10 @@ export const goalLocalRepository: GoalRepository = {
   },
 
   async addGoal(data) {
+    await enforceCountLimitedFeatureGate('activeGoals', () => this.getActiveGoalCount(), {
+      enabled: data.status === GoalStatus.ACTIVE,
+    });
+
     const goals = await this.getAllGoals();
     const newGoal: Goal = {
       ...data,
@@ -40,6 +45,16 @@ export const goalLocalRepository: GoalRepository = {
     const goals = await this.getAllGoals();
     const idx = goals.findIndex((g) => g.id === id);
     if (idx === -1) return null;
+
+    const existingGoal = goals[idx];
+    const nextStatus = updates.status ?? existingGoal.status;
+    const isBecomingActive =
+      existingGoal.status !== GoalStatus.ACTIVE && nextStatus === GoalStatus.ACTIVE;
+
+    await enforceCountLimitedFeatureGate('activeGoals', () => this.getActiveGoalCount(), {
+      enabled: isBecomingActive,
+    });
+
     goals[idx] = { ...goals[idx], ...updates };
     await this.saveGoals(goals);
     return goals[idx];

@@ -1,15 +1,22 @@
 // Bad habit & urge event store (local-only by policy; never sync to Firebase)
 import type { BadHabit, UrgeEvent } from '../types/models';
 import { generateUUID } from './baseStore';
+import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
+import { getSensitiveItem, setSensitiveItem } from '@/storage/secureDataStorage';
 
 const BAD_HABITS_KEY = 'kaarma_bad_habits';
 const URGE_EVENTS_KEY = 'kaarma_urge_events';
+const BAD_HABITS_SECURE_KEY = 'kaarma_secure_bad_habits_v1';
+const URGE_EVENTS_SECURE_KEY = 'kaarma_secure_urge_events_v1';
 
 // ─── Bad Habits ──────────────────────────────────────────────────────────────
 
 export async function getAllBadHabits(): Promise<BadHabit[]> {
-  const { storage } = await import('../storage/asyncStorage');
-  return (await storage.getItem<BadHabit[]>(BAD_HABITS_KEY)) ?? [];
+  return getSensitiveItem<BadHabit[]>({
+    secureKey: BAD_HABITS_SECURE_KEY,
+    legacyKey: BAD_HABITS_KEY,
+    defaultValue: [],
+  });
 }
 
 export async function getBadHabitById(id: string): Promise<BadHabit | undefined> {
@@ -18,13 +25,18 @@ export async function getBadHabitById(id: string): Promise<BadHabit | undefined>
 }
 
 export async function saveBadHabits(habits: BadHabit[]): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  await storage.setItem(BAD_HABITS_KEY, habits);
+  await setSensitiveItem({
+    secureKey: BAD_HABITS_SECURE_KEY,
+    legacyKey: BAD_HABITS_KEY,
+    value: habits,
+  });
 }
 
 export async function addBadHabit(
   data: Omit<BadHabit, 'id' | 'createdAt'>,
 ): Promise<BadHabit> {
+  await enforceCountLimitedFeatureGate('badHabits', countActiveBadHabits);
+
   const habits = await getAllBadHabits();
   const newHabit: BadHabit = {
     ...data,
@@ -48,7 +60,7 @@ export async function deleteBadHabit(id: string): Promise<void> {
   const habits = await getAllBadHabits();
   await saveBadHabits(habits.filter((h) => h.id !== id));
   // Also delete urge events for this habit
-  const events = await getUrgeEventsForHabit(id);
+  const events = await getAllUrgeEvents();
   await saveUrgeEvents(events.filter((e) => e.badHabitId !== id));
 }
 
@@ -59,26 +71,34 @@ export function countActiveBadHabits(): Promise<number> {
 // ─── Urge Events ─────────────────────────────────────────────────────────────
 
 export async function getUrgeEventsForHabit(badHabitId: string): Promise<UrgeEvent[]> {
-  const { storage } = await import('../storage/asyncStorage');
-  const all = (await storage.getItem<UrgeEvent[]>(URGE_EVENTS_KEY)) ?? [];
+  const all = await getSensitiveItem<UrgeEvent[]>({
+    secureKey: URGE_EVENTS_SECURE_KEY,
+    legacyKey: URGE_EVENTS_KEY,
+    defaultValue: [],
+  });
   return all.filter((e) => e.badHabitId === badHabitId);
 }
 
 export async function getAllUrgeEvents(): Promise<UrgeEvent[]> {
-  const { storage } = await import('../storage/asyncStorage');
-  return (await storage.getItem<UrgeEvent[]>(URGE_EVENTS_KEY)) ?? [];
+  return getSensitiveItem<UrgeEvent[]>({
+    secureKey: URGE_EVENTS_SECURE_KEY,
+    legacyKey: URGE_EVENTS_KEY,
+    defaultValue: [],
+  });
 }
 
 export async function saveUrgeEvents(events: UrgeEvent[]): Promise<void> {
-  const { storage } = await import('../storage/asyncStorage');
-  await storage.setItem(URGE_EVENTS_KEY, events);
+  await setSensitiveItem({
+    secureKey: URGE_EVENTS_SECURE_KEY,
+    legacyKey: URGE_EVENTS_KEY,
+    value: events,
+  });
 }
 
 export async function logUrgeEvent(data: Omit<UrgeEvent, 'id' | 'loggedAt'>): Promise<UrgeEvent> {
-  const { storage } = await import('../storage/asyncStorage');
-  const all = (await storage.getItem<UrgeEvent[]>(URGE_EVENTS_KEY)) ?? [];
+  const all = await getAllUrgeEvents();
   const event: UrgeEvent = { ...data, id: generateUUID(), loggedAt: new Date().toISOString() };
-  await storage.setItem(URGE_EVENTS_KEY, [...all, event]);
+  await saveUrgeEvents([...all, event]);
   return event;
 }
 

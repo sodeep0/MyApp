@@ -4,14 +4,11 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LoadingState } from '@/components/LoadingState';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
 import { safeBack } from '@/navigation/safeBack';
 import { getGoalById, updateGoal, toggleMilestone } from '@/stores/goalStore';
 import { type Goal, GoalStatus } from '@/types/models';
-
-const MOCK_LINKED_HABITS = [
-  { id: '1', name: 'Morning Run', icon: 'walk-outline' },
-];
 
 const QUICK_LOG_VALUES = ['0.5', '1', '1.5', '2'];
 
@@ -20,6 +17,7 @@ export default function GoalDetailScreen() {
   const { id } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [goal, setGoal] = useState<Goal | null>(null);
+  const [loading, setLoading] = useState(true);
   const [milestonesCollapsed, setMilestonesCollapsed] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -28,38 +26,66 @@ export default function GoalDetailScreen() {
   useFocusEffect(
     React.useCallback(() => {
       const load = async () => {
+        setLoading(true);
+
         if (id) {
           const g = await getGoalById(id as string);
-          if (g) {
-            setGoal(g);
-            setIsCompleted(g.status === GoalStatus.COMPLETED);
-          }
+          setGoal(g ?? null);
+          setIsCompleted(g?.status === GoalStatus.COMPLETED);
+        } else {
+          setGoal(null);
+          setIsCompleted(false);
         }
+
+        setLoading(false);
       };
-      load();
+      void load();
     }, [id])
   );
 
   const refreshGoal = async () => {
     if (id) {
       const g = await getGoalById(id as string);
-      if (g) setGoal(g);
+      setGoal(g ?? null);
+      setIsCompleted(g?.status === GoalStatus.COMPLETED);
     }
   };
 
-  const currentGoal = goal || {
-    id: '1', userId: 'local', category: 'FITNESS', title: 'Run a 5K',
-    description: 'Build up running endurance and complete a 5K without stopping.',
-    goalType: 'QUANTITATIVE' as const, currentValue: 3.4, targetValue: 5, unit: 'km',
-    targetDate: new Date(Date.now() + 3 * 86400000).toISOString(),
-    milestones: [
-      { id: '1', title: 'Run 1km without stopping', isCompleted: true, completedAt: '2026-03-01' },
-      { id: '2', title: 'Run 2km without stopping', isCompleted: true, completedAt: '2026-03-10' },
-      { id: '3', title: 'Run 3km without stopping', isCompleted: false, completedAt: null },
-      { id: '4', title: 'Run 5km without stopping', isCompleted: false, completedAt: null },
-    ],
-    status: GoalStatus.ACTIVE, linkedHabitIds: [], createdAt: new Date().toISOString(), completedAt: null,
-  } as Goal;
+  if (loading) {
+    return (
+      <LoadingState
+        fullScreen
+        title="Loading Goal"
+        message="Pulling progress, milestones, and deadline details."
+      />
+    );
+  }
+
+  if (!goal) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => safeBack(router, '/(tabs)/goals')}
+            style={({ pressed }) => [styles.headerBtn, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
+          >
+            <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Goal Detail</Text>
+          <View style={styles.headerBtnPlaceholder} />
+        </View>
+
+        <View style={styles.notFoundWrap}>
+          <Text style={styles.notFoundTitle}>Goal not found</Text>
+          <Text style={styles.notFoundMessage}>
+            This goal may have been deleted or is no longer available locally.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  const currentGoal = goal;
 
   const milestones = currentGoal.milestones || [];
   const completedMilestones = milestones.filter((m) => m.isCompleted).length;
@@ -249,26 +275,6 @@ export default function GoalDetailScreen() {
           )}
         </View>
 
-        {MOCK_LINKED_HABITS.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="link" size={16} color={Colors.TextSecondary} />
-              <Text style={styles.sectionTitle}>LINKED HABITS</Text>
-            </View>
-            {MOCK_LINKED_HABITS.map((habit) => (
-              <View key={habit.id} style={styles.habitItem}>
-                <View style={styles.habitItemLeft}>
-                  <View style={styles.habitIconBox}>
-                    <Ionicons name={habit.icon as any} size={16} color={Colors.SteelBlue} />
-                  </View>
-                  <Text style={styles.habitName}>{habit.name}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={Colors.DustyTaupe} />
-              </View>
-            ))}
-          </View>
-        )}
-
         {milestones.length > 0 && (
           <View style={styles.section}>
             <Pressable onPress={toggleCollapse} style={styles.sectionHeader}>
@@ -422,9 +428,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerBtnPlaceholder: {
+    width: 40,
+    height: 40,
+  },
   headerTitle: {
     ...Typography.Headline2,
     color: Colors.TextPrimary,
+  },
+  notFoundWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.screenH,
+  },
+  notFoundTitle: {
+    ...Typography.Headline2,
+    color: Colors.TextPrimary,
+    marginBottom: Spacing.xs,
+  },
+  notFoundMessage: {
+    ...Typography.Body2,
+    color: Colors.TextSecondary,
+    textAlign: 'center',
   },
   scrollContent: {
     paddingHorizontal: Spacing.screenH,
@@ -588,37 +614,6 @@ const styles = StyleSheet.create({
     color: Colors.TextSecondary,
     textTransform: 'uppercase',
     flex: 1,
-  },
-  habitItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.Surface,
-    borderColor: Colors.BorderSubtle,
-    borderWidth: 1,
-    borderRadius: Shapes.Card,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    marginBottom: Spacing.sm,
-    ...Shadows.Card,
-  },
-  habitItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  habitIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Colors.SteelBlue + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  habitName: {
-    ...Typography.Body1,
-    color: Colors.TextPrimary,
-    fontWeight: '500',
   },
   milestoneRow: {
     flexDirection: 'row',

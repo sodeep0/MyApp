@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const PREMIUM_KEY = 'kaarma_premium';
+import { storage } from '@/storage/asyncStorage';
+import {
+  PREMIUM_KEY,
+  getStoredPremiumState,
+  setStoredPremiumState,
+} from '@/services/subscription';
 
 // Mock subscription hook for premium gating
 // In production, replace with RevenueCat SDK integration
@@ -10,32 +13,38 @@ export function useSubscription() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+
     const check = async () => {
       try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          const stored = window.localStorage.getItem(PREMIUM_KEY);
-          setIsPremium(stored === 'true');
-        } else {
-          const stored = await AsyncStorage.getItem(PREMIUM_KEY);
-          setIsPremium(stored === 'true');
+        const stored = await getStoredPremiumState();
+        if (isMounted) {
+          setIsPremium(stored);
         }
       } catch {
         // ignore
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
-    check();
+
+    void check();
+    const unsubscribe = storage.subscribe(PREMIUM_KEY, () => {
+      void check();
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const purchaseMonthly = async () => {
     setIsPremium(true);
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(PREMIUM_KEY, 'true');
-      } else {
-        await AsyncStorage.setItem(PREMIUM_KEY, 'true');
-      }
+      await setStoredPremiumState(true);
     } catch {
       // ignore
     }
@@ -43,13 +52,7 @@ export function useSubscription() {
 
   const restorePurchases = async () => {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const stored = window.localStorage.getItem(PREMIUM_KEY);
-        setIsPremium(stored === 'true');
-      } else {
-        const stored = await AsyncStorage.getItem(PREMIUM_KEY);
-        setIsPremium(stored === 'true');
-      }
+      setIsPremium(await getStoredPremiumState());
     } catch {
       // ignore
     }
@@ -58,11 +61,7 @@ export function useSubscription() {
   const cancelSubscription = async () => {
     setIsPremium(false);
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(PREMIUM_KEY, 'false');
-      } else {
-        await AsyncStorage.setItem(PREMIUM_KEY, 'false');
-      }
+      await setStoredPremiumState(false);
     } catch {
       // ignore
     }

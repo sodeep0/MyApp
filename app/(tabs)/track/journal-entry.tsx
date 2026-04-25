@@ -8,13 +8,15 @@ import {
   Pressable,
   Alert,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
 import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
 import { useCountLimitedFeatureGate } from '@/hooks/useFeatureGate';
 import { safeBack } from '@/navigation/safeBack';
+import { isCountLimitedFeatureLockedError } from '@/services/featureAccess';
+import { requestJournalAccess } from '@/services/journalGate';
 import {
   addJournalEntry,
   countJournalEntries,
@@ -57,34 +59,65 @@ export default function JournalEntryScreen() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(isEditing);
+  const [loading, setLoading] = useState(true);
   const [promptIndex] = useState(Math.floor(Math.random() * WRITING_PROMPTS.length));
   const [showPrompt, setShowPrompt] = useState(true);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasLoadedInitialEntry = useRef(false);
   const lastSavedContent = useRef('');
   const lastSavedMood = useRef(0);
 
   useEffect(() => {
-    if (!isEditing) return;
-    const loadEntry = async () => {
-      const entry = await getJournalEntryById(id as string);
-      if (entry) {
-        setMoodScore(entry.moodScore);
-        try {
-          const parsed = JSON.parse(entry.contentJson);
-          setContent(typeof parsed === 'string' ? parsed : entry.contentJson);
-        } catch {
-          setContent(entry.contentJson);
+    hasLoadedInitialEntry.current = false;
+  }, [id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const ensureAccess = async () => {
+        setLoading(true);
+        const granted = await requestJournalAccess({
+          router,
+          onCancelled: () => safeBack(router, '/(tabs)/track/journal'),
+          onUnavailableBack: () => safeBack(router, '/(tabs)/track/journal'),
+        });
+        if (!isActive || !granted) {
+          setLoading(false);
+          return;
         }
-        setTags(entry.tags);
-        lastSavedContent.current = entry.contentJson;
-        lastSavedMood.current = entry.moodScore;
-      }
-      setLoading(false);
-    };
-    loadEntry();
-  }, [id, isEditing]);
+
+        if (isEditing && id && !hasLoadedInitialEntry.current) {
+          const entry = await getJournalEntryById(id as string);
+          if (!isActive) return;
+
+          if (entry) {
+            setMoodScore(entry.moodScore);
+            try {
+              const parsed = JSON.parse(entry.contentJson);
+              setContent(typeof parsed === 'string' ? parsed : entry.contentJson);
+            } catch {
+              setContent(entry.contentJson);
+            }
+            setTags(entry.tags);
+            lastSavedContent.current = entry.contentJson;
+            lastSavedMood.current = entry.moodScore;
+          }
+
+          hasLoadedInitialEntry.current = true;
+        }
+
+        setLoading(false);
+      };
+
+      ensureAccess();
+
+      return () => {
+        isActive = false;
+      };
+    }, [id, isEditing, router]),
+  );
 
   const triggerAutoSave = useCallback(() => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
@@ -185,6 +218,15 @@ export default function JournalEntryScreen() {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       safeBack(router, '/(tabs)/track/journal');
     } catch (error) {
+      if (isCountLimitedFeatureLockedError(error)) {
+        await journalGate.refresh();
+        Alert.alert('Premium Required', error.message, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => router.push('/premium' as any) },
+        ]);
+        return;
+      }
+
       console.error('Failed to save journal entry:', error);
       Alert.alert('Error', 'Could not save entry. Please try again.');
     } finally {

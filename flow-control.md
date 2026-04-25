@@ -1,439 +1,334 @@
-# Kaarma — App Flow Control & Screen Navigation
-
-> **Version:** 1.0.0  
-> **Last Updated:** 2026-04-13
+# Kaarma - Flow Control And Route Map
 
----
-
-## 📱 Quick Reference: Screen Navigation Map
+> Last updated: 2026-04-21
+> Scope: verified current navigation flow for the Expo Router app, with placeholders called out explicitly
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        ENTRY POINT                                   │
-│                     (app/_layout.tsx)                                │
-│                                                                      │
-│           Checks: isOnboardingCompleted()                             │
-│           ├─ NO  →  /onboarding                                      │
-│           └─ YES →  /(tabs)                                          │
-└─────────────────────────────────────────────────────────────────────┘
-```
+This document describes the app as it exists in code today. When a route, action, or settings item is only partially implemented, it is marked as `Partial` or `Planned` instead of being described as fully available.
 
----
+## 1. Root Flow
 
-## 🚀 1. ONBOARDING FLOW (First-Time Users Only)
+### Root stack
 
-**Route:** `/onboarding` (Stack Navigator)  
-**Purpose:** Introduce app, collect user preferences, request permissions  
-**Shown:** Only on first app launch — never shown again after completion
+Defined in [app/_layout.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/_layout.tsx).
 
-### Sequence:
-
-```
-Splash Screen (2.3s auto-advance)
-       ↓
-Welcome Screen (3-slide carousel)
-       ↓ (tap "Next" → or auto on last slide)
-Intentions Screen (Multi-select intention picker)
-       ↓ (tap "Continue")
-Permissions Screen (Permission request cards)
-       ↓ (tap "Get Started")
-Dashboard Reveal (Transition to main app)
-       ↓
-   /(tabs)  ← Main App
-```
+Top-level routes:
 
-### Screens in Order:
+- `index`
+- `onboarding/*`
+- `auth/*`
+- `(tabs)/*`
+- `profile/*`
+- `premium/*`
+- `oauthredirect`
 
-| # | Screen | Route | File | Description | Navigation Trigger |
-|---|--------|-------|------|-------------|-------------------|
-| 1 | **Splash** | `/onboarding/splash` | `app/onboarding/splash.tsx` | Animated logo + tagline ("Own Your Day. Every Day.") | Auto-advances after 2.3s |
-| 2 | **Welcome** | `/onboarding/welcome` | `app/onboarding/welcome.tsx` | 3-slide feature carousel (Habits, Bad Habits, Goals) | Tap "Next" → Intentions, or tap "I already have an account" → Skip to `/(tabs)` |
-| 3 | **Intentions** | `/onboarding/intentions` | `app/onboarding/intentions.tsx` | Multi-select intention picker (what user wants to achieve) | Tap "Continue" → Permissions |
-| 4 | **Permissions** | `/onboarding/permissions` | `app/onboarding/permissions.tsx` | Permission request cards (notifications, etc.) | Tap "Get Started" → Dashboard Reveal |
-| 5 | **Reveal** | `/onboarding/reveal` | `app/onboarding/reveal.tsx` | Dashboard reveal animation | Auto-transitions to `/(tabs)` |
-
-**⚠️ Skip Option:** Users can bypass onboarding by tapping *"I already have an account"* on Welcome screen → navigates directly to `/(tabs)`
-
----
-
-## 🏠 2. MAIN APP — BOTTOM TAB NAVIGATOR
-
-**Route:** `/(tabs)` (Bottom Tab Navigator with 5 tabs)  
-**Entry:** After onboarding completion or subsequent app launches
-
-### Tab Structure (Left → Right):
-
-| Tab Index | Tab Name | Route | Icon (Outline/Focused) | Entry File |
-|-----------|----------|-------|------------------------|------------|
-| 0 | **Home** | `/(tabs)/index` | `home-outline` / `home` | `app/(tabs)/index.tsx` |
-| 1 | **Habits** | `/(tabs)/habits` | `checkmark-done-outline` / `checkmark-done` | `app/(tabs)/habits/index.tsx` |
-| 2 | **Track** | `/(tabs)/track` | `layers-outline` / `layers` | `app/(tabs)/track/index.tsx` |
-| 3 | **Goals** | `/(tabs)/goals` | `flag-outline` / `flag` | `app/(tabs)/goals/index.tsx` |
-| 4 | **Screen Time** | `/(tabs)/screen-time` | `time-outline` / `time` | `app/(tabs)/screen-time/index.tsx` |
-
-**Navigation:** Users can freely switch between all 5 tabs at any time
-
----
-
-## 📋 3. DETAILED SCREEN FLOWS BY TAB
-
----
-
-### 🏡 TAB 1: HOME (`/(tabs)/index`)
-
-**Entry Point:** Default tab on app open  
-**Purpose:** Daily dashboard, quick actions, habit check-ins
-
-#### Accessible Screens from Home:
-
-| Destination | Route | Trigger | Notes |
-|-------------|-------|---------|-------|
-| Profile/Settings | `/profile` | Tap avatar (top-right) | Navigates outside tabs |
-| Habit Detail | `/habits/detail?id={habitId}` | Tap any habit row | Stack navigation within Habits tab |
-| Add/Edit Habit | `/habits/add-edit` | Quick Action: "+Habit" | Navigates to Habits tab add screen |
-| Track Hub | `/track` | Quick Action: "+Log" | Navigates to Track tab |
-| Journal | `/track/journal` | Quick Action: "Journal" or "Write Entry" button | Navigates to Journal screen |
-| Add Goal | `/goals/add-edit` | Quick Action: "Goals" | Navigates to Goals tab add screen |
-| Bad Habits | `/track/bad-habits` | Tap Bad Habit Tracker card | Navigates to Bad Habits list |
-| Goal Detail | `/goals/detail?id={goalId}` | Tap any goal in carousel | Stack navigation within Goals tab |
-| Habits List | `/habits` | "See all" link in Today's Habits section | Navigates to Habits tab |
-| Goals List | `/goals` | "See all" link in Goals section | Navigates to Goals tab |
-| **FAB Modal** | (Modal overlay) | Tap FAB button (bottom-right) | Shows 4 quick actions: Check-in habit, Journal entry, Log activity, Create goal |
-
-#### Quick Actions (4 buttons):
-1. **+Habit** → `/habits/add-edit`
-2. **+Log** → `/track/activity`
-3. **Journal** → `/track/journal`
-4. **Goals** → `/goals/add-edit`
-
----
-
-### ✅ TAB 2: HABITS (`/(tabs)/habits`)
-
-**Entry:** Tap "Habits" tab  
-**Purpose:** View, manage, and track daily habits
-
-#### Stack Navigator Screens:
-
-| Screen | Route | File | Description | Navigation |
-|--------|-------|------|-------------|------------|
-| **Habit List** | `/(tabs)/habits/index` | `app/(tabs)/habits/index.tsx` | List of all habits with filters (All, Morning, Evening, Health, Work), weekly progress dots, ring progress indicators | Entry point |
-| **Add/Edit Habit** | `/(tabs)/habits/add-edit` | `app/(tabs)/habits/add-edit.tsx` | Form to create or edit a habit | From list: Tap FAB "+" or "Build your first habit" button |
-| **Habit Detail** | `/(tabs)/habits/detail` | `app/(tabs)/habits/detail.tsx` | Streak counter, calendar heatmap, completion history | From list: Tap habit icon or name |
+### Launch gate
 
-#### Navigation Flow:
-```
-Habit List (index)
-    ├─ Tap FAB "+" → Add Habit Form (add-edit)
-    ├─ Tap "Build your first habit" → Add Habit Form (add-edit)
-    └─ Tap habit → Habit Detail (detail)
-```
-
----
+The real onboarding gate lives in [app/index.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/index.tsx), not in `app/_layout.tsx`.
 
-### 📊 TAB 3: TRACK (`/(tabs)/track`)
-
-**Entry:** Tap "Track" tab  
-**Purpose:** Hub for bad habits, journal, and activity logging
-
-#### Stack Navigator Screens:
-
-| Screen | Route | File | Description | Navigation |
-|--------|-------|------|-------------|------------|
-| **Track Hub** | `/(tabs)/track/index` | `app/(tabs)/track/index.tsx` | Grid of 3 modules: Bad Habits, Journal, Activity Log | Entry point |
-| **Bad Habits List** | `/track/bad-habits` | `app/(tabs)/track/bad-habits.tsx` | List of tracked bad habits with clean streaks | From hub: Tap "Bad Habits" card |
-| **Bad Habit Detail** | `/track/bad-habit-detail` | `app/(tabs)/track/bad-habit-detail.tsx` | Detail view of specific bad habit | From bad habits list: Tap a bad habit |
-| **Add/Edit Bad Habit** | `/track/add-edit-bad-habit` | `app/(tabs)/track/add-edit-bad-habit.tsx` | Form to add or edit a bad habit | From bad habits list: Tap add button |
-| **Relapse Sheet** | `/track/relapse-sheet` | `app/(tabs)/track/relapse-sheet.tsx` | Log urges and relapse events | From bad habit detail |
-| **Journal List** | `/track/journal` | `app/(tabs)/track/journal.tsx` | List of journal entries with mood tracking | From hub: Tap "Journal" card |
-| **Journal Entry** | `/track/journal-entry` | `app/(tabs)/track/journal-entry.tsx` | Create or edit a journal entry | From journal list: Tap add or entry |
-| **Activity Log** | `/track/activity` | `app/(tabs)/track/activity.tsx` | List of logged activities (exercise, work, learning) | From hub: Tap "Activity Log" card |
-| **Log Activity** | `/track/log-activity` | `app/(tabs)/track/log-activity.tsx` | Form to log a new activity | From activity list: Tap add button |
+Launch behavior:
 
-#### Navigation Flow:
-```
-Track Hub (index)
-    ├─ Tap "Bad Habits" → Bad Habits List (bad-habits)
-    │   ├─ Tap bad habit → Bad Habit Detail (bad-habit-detail)
-    │   │   └─ Log urge/relapse → Relapse Sheet (relapse-sheet)
-    │   └─ Tap add → Add/Edit Bad Habit (add-edit-bad-habit)
-    │
-    ├─ Tap "Journal" → Journal List (journal)
-    │   └─ Tap add/entry → Journal Entry (journal-entry)
-    │
-    └─ Tap "Activity Log" → Activity List (activity)
-        └─ Tap add → Log Activity (log-activity)
-```
+1. App mounts the root stack in [app/_layout.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/_layout.tsx).
+2. [app/index.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/index.tsx) checks `isOnboardingCompleted()`.
+3. If onboarding is incomplete, it redirects to `/onboarding`.
+4. If onboarding is complete, it redirects to `/(tabs)`.
 
----
+## 2. Onboarding Flow
 
-### 🎯 TAB 4: GOALS (`/(tabs)/goals`)
+Routes live under `app/onboarding/*` and are mounted by [app/onboarding/_layout.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/onboarding/_layout.tsx).
 
-**Entry:** Tap "Goals" tab  
-**Purpose:** Set, track, and achieve goals
+Verified sequence:
 
-#### Stack Navigator Screens:
+1. `/onboarding/splash`
+2. `/onboarding/welcome`
+3. `/onboarding/intentions`
+4. `/onboarding/permissions`
+5. `/onboarding/reveal`
 
-| Screen | Route | File | Description | Navigation |
-|--------|-------|------|-------------|------------|
-| **Goal List** | `/(tabs)/goals/index` | `app/(tabs)/goals/index.tsx` | Filterable list (Active, Completed, All) with card/timeline view toggle | Entry point |
-| **Add/Edit Goal** | `/(tabs)/goals/add-edit` | `app/(tabs)/goals/add-edit.tsx` | Form to create or edit a goal | From list: Tap FAB "+" or "Create Goal" button |
-| **Goal Detail** | `/(tabs)/goals/detail` | `app/(tabs)/goals/detail.tsx` | Goal progress, milestones, deadline tracking | From list: Tap any goal card |
+### Actual behavior by screen
 
-#### Navigation Flow:
-```
-Goal List (index)
-    ├─ Tap FAB "+" → Add/Edit Goal (add-edit)
-    ├─ Tap "Create Goal" (empty state) → Add/Edit Goal (add-edit)
-    └─ Tap goal card → Goal Detail (detail)
-```
-
-**Filter Tabs:** Active | Completed | All  
-**View Modes:** Card view (grid) | Timeline view (vertical list)
-
----
-
-### ⏱️ TAB 5: SCREEN TIME (`/(tabs)/screen-time`)
-
-**Entry:** Tap "Screen Time" tab  
-**Purpose:** Monitor and control app usage
-
-#### Screens:
-
-| Screen | Route | File | Description | Navigation |
-|--------|-------|------|-------------|------------|
-| **Screen Time Dashboard** | `/(tabs)/screen-time/index` | `app/(tabs)/screen-time/index.tsx` | Usage stats, hourly activity chart, top apps, focus mode, blocked apps | Entry point (single screen) |
-| **Permission Gate** | (Component) | `components/screenTime/PermissionGate.tsx` | Permission request screen (shown if no screen time access) | Auto-shown when permission denied |
-
-#### Internal Features (no navigation, all inline):
-- **Period Toggle:** Today | Week (switches data view)
-- **Focus Mode:** Start focus session (25, 45, 60 min options)
-- **App Blocking:** Toggle blocked apps on/off
-- **Demo Data:** Falls back to demo data on iOS or without permissions
-
----
-
-## 👤 4. PROFILE & SETTINGS (Out-of-Tabs)
+| Screen | Route | Status | Actual behavior |
+| --- | --- | --- | --- |
+| Splash | `/onboarding/splash` | Verified | Intro screen in onboarding stack |
+| Welcome | `/onboarding/welcome` | Verified | Carousel-style introduction with next/skip actions |
+| Intentions | `/onboarding/intentions` | Verified | Saves selected intentions locally |
+| Permissions | `/onboarding/permissions` | Partial | UI exists, but permission requests are still mostly placeholder/local-state only |
+| Reveal | `/onboarding/reveal` | Verified | Final confirmation screen; user taps to enter the app |
 
-**Route:** `/profile` (Stack Navigator, accessible from anywhere)  
-**Entry:** Tap avatar on Home screen header
-
-### Screens:
-
-| Screen | Route | File | Description | Navigation |
-|--------|-------|------|-------------|------------|
-| **Profile/Settings** | `/profile/index` | `app/profile/index.tsx` | Profile card + settings menu (Account, Preferences, Data & Privacy, About) | From Home: Tap avatar |
-
-#### Settings Sections:
-1. **Account:**
-   - Edit Profile (inline editing)
-   - Email & Password
-
-2. **Preferences:**
-   - Notifications (toggle switch)
-   - Appearance (theme selection)
-   - Language
-
-3. **Data & Privacy:**
-   - Privacy & Security
-   - Data Export
-   - Delete Account
-
-4. **About:**
-   - Rate Kaarma
-   - Help & Support
-
----
-
-## 💎 5. PREMIUM SUBSCRIPTION (Modal)
-
-**Route:** `/premium` (Modal presentation)  
-**Entry:** Tap "Upgrade to Premium" badge in Profile screen
-
-### Screens:
-
-| Screen | Route | File | Description | Navigation |
-|--------|-------|------|-------------|------------|
-| **Premium Landing** | `/premium/index` | `app/premium/index.tsx` | Premium feature showcase + subscription options | From Profile: Tap "Upgrade to Premium" |
-
-**Premium Features (gated via `useSubscription` hook):**
-- Advanced analytics
-- Unlimited goals/habits
-- Cloud sync
-- Custom themes
-- Export data
-
----
-
-## 🔄 6. CROSS-SCREEN NAVIGATION MAP
-
-### How Users Can Navigate Between Screens:
-
-```
-FROM Home Screen:
-  → Profile (avatar)
-  → Any Quick Action button
-  → Any habit detail (tap habit row)
-  → Bad habits list (tap tracker card)
-  → Journal (tap write entry)
-  → Goal detail (tap goal carousel)
-  → FAB modal (4 quick actions)
-
-FROM Habits Tab:
-  → Add/edit habit (FAB)
-  → Habit detail (tap habit)
-  → Home (tab switch)
-  → Track tab (tab switch)
-  → Goals tab (tab switch)
-
-FROM Track Tab:
-  → Bad habits sub-flow
-  → Journal sub-flow
-  → Activity log sub-flow
-  → Any other tab (tab switch)
-
-FROM Goals Tab:
-  → Add/edit goal (FAB)
-  → Goal detail (tap goal)
-  → Any other tab (tab switch)
-
-FROM Screen Time Tab:
-  → Permission gate (if no access)
-  → Any other tab (tab switch)
-
-FROM Profile:
-  → Premium landing (upgrade badge)
-  → Home (back navigation)
-
-FROM Any Deep Screen:
-  → Back to parent (back button/gesture)
-  → Home (tab switch)
-```
-
----
-
-## 🚦 7. NAVIGATION GUARD RULES
-
-### Onboarding Gate:
-```
-App Launch
-    ↓
-Check: isOnboardingCompleted()
-    ├─ false → /onboarding (must complete or skip)
-    └─ true → /(tabs) (direct access)
-```
-
-### Premium Gates:
-- **Triggered by:** `useSubscription()` hook
-- **Components:** `<PremiumLockedBanner>` shown on locked features
-- **Redirect:** Tap locked feature → `/premium` modal
-
-### Permission Gates:
-- **Screen Time:** Shows `<PermissionGate>` if no usage stats permission
-- **Notifications:** Requested during onboarding, toggleable in settings
-
----
-
-## 📊 8. SCREEN HIERARCHY TREE
-
-```
+### Important onboarding rules
+
+- The reveal screen marks onboarding complete in [app/onboarding/reveal.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/onboarding/reveal.tsx).
+- The welcome-screen skip action now also marks onboarding complete and routes to sign-in in [app/onboarding/welcome.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/onboarding/welcome.tsx).
+- Skip route for existing users: `/auth/sign-in`
+
+### Real skip path
+
+If the user taps `I already have an account` on the welcome screen:
+
+1. `setOnboardingCompleted(true)` is saved.
+2. The app navigates to `/auth/sign-in`.
+
+This means the skip path is now a real auth entry point rather than a temporary jump straight into tabs.
+
+## 3. Auth Flow
+
+Routes live under `app/auth/*`.
+
+### Auth routes
+
+| Screen | Route | Status | Notes |
+| --- | --- | --- | --- |
+| Auth callback placeholder | `/auth` | Partial | Loading-style shell; not the main sign-in screen |
+| Sign in | `/auth/sign-in` | Verified | Google-first sign-in flow |
+| Create account | `/auth/create-account` | Verified | Google-first sign-up flow |
+| OAuth redirect | `/oauthredirect` | Partial | Callback/loading route used for auth session completion |
+
+### Actual auth entry points
+
+Users can reach auth from:
+
+- onboarding skip in [app/onboarding/welcome.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/onboarding/welcome.tsx)
+- guest profile actions in [app/profile/index.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/profile/index.tsx)
+
+### Post-auth behavior
+
+After successful Google auth:
+
+- sign-in routes to `/profile`
+- create-account routes to `/profile`
+
+This behavior currently lives in:
+
+- [app/auth/sign-in.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/auth/sign-in.tsx)
+- [app/auth/create-account.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/auth/create-account.tsx)
+
+## 4. Main Tabs
+
+The bottom tab shell is defined in [app/(tabs)/_layout.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/(tabs)/_layout.tsx).
+
+### Current tab set
+
+| Tab | Route | Label shown in UI | Status |
+| --- | --- | --- | --- |
+| Home | `/(tabs)/index` | `Home` | Verified |
+| Habits | `/(tabs)/habits` | `Habits` | Verified |
+| Track | `/(tabs)/track` | `Track` | Verified |
+| Goals | `/(tabs)/goals` | `Goals` | Verified |
+| Screen Time | `/(tabs)/screen-time` | `Time` | Verified |
+
+Notes:
+
+- All tabs currently use `unmountOnBlur: true`.
+- Re-selecting an already active tab attempts to pop its nested stack to the top.
+
+## 5. Home Flow
+
+Main screen: [app/(tabs)/index.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/(tabs)/index.tsx)
+
+### Verified destinations from Home
+
+| Trigger | Destination |
+| --- | --- |
+| Avatar | `/profile` |
+| Quick action: Habit | `/(tabs)/habits/add-edit` |
+| Quick action: Log | `/(tabs)/track/activity` |
+| Quick action: Journal | `/(tabs)/track/journal` |
+| Quick action: Goals | `/(tabs)/goals/add-edit` |
+| See all habits | `/(tabs)/habits` |
+| Habit card | `/habits/detail?id={habitId}` |
+| See all goals | `/(tabs)/goals` |
+| Goal card | `/goals/detail?id={goalId}` |
+| Bad habit tracker card | `/(tabs)/track/bad-habits` |
+
+### Home quick-action sheet
+
+Status: Verified
+
+The floating action sheet exists and routes into the same nested tab stacks rather than separate modal screens.
+
+## 6. Nested Tab Stacks
+
+### Habits stack
+
+Routes under `app/(tabs)/habits/*`:
+
+- `/(tabs)/habits`
+- `/(tabs)/habits/add-edit`
+- `/(tabs)/habits/detail`
+
+Status: Verified
+
+### Track stack
+
+Routes under `app/(tabs)/track/*`:
+
+- `/(tabs)/track`
+- `/(tabs)/track/bad-habits`
+- `/(tabs)/track/bad-habit-detail`
+- `/(tabs)/track/add-edit-bad-habit`
+- `/(tabs)/track/relapse-sheet`
+- `/(tabs)/track/journal`
+- `/(tabs)/track/journal-entry`
+- `/(tabs)/track/activity`
+- `/(tabs)/track/log-activity`
+
+Status: Verified
+
+### Goals stack
+
+Routes under `app/(tabs)/goals/*`:
+
+- `/(tabs)/goals`
+- `/(tabs)/goals/add-edit`
+- `/(tabs)/goals/detail`
+
+Status: Verified
+
+### Screen time stack
+
+Routes under `app/(tabs)/screen-time/*`:
+
+- `/(tabs)/screen-time`
+
+Status: Partial
+
+What exists today:
+
+- dashboard UI
+- inline focus-session placeholder UI
+- inline blocked-app toggles
+- inline permission gate fallback
+
+What does not exist yet:
+
+- a dedicated manage-app-limits route
+- real blocking/scheduling flows
+
+## 7. Profile And Premium
+
+### Profile
+
+Route: `/profile`
+
+Status: Verified shell, Partial settings flow
+
+What works:
+
+- guest-state auth entry buttons
+- signed-in profile card
+- inline display-name editing
+- logout flow
+- premium upsell badge
+- dedicated privacy/security route at `/profile/privacy-security`
+
+What is still partial:
+
+- many settings rows are still presentational or placeholder only
+- notifications switch is local UI state
+- delete account is not implemented
+- data export/help rows do not yet route to dedicated screens
+
+### Premium
+
+Route: `/premium`
+
+Status: Verified modal route, Partial billing implementation
+
+What works:
+
+- premium modal presentation
+- plan selection UI
+- mock local premium state
+
+What is still partial:
+
+- no real store billing / RevenueCat integration
+
+## 8. Guard Rules
+
+### Onboarding guard
+
+Status: Verified
+
+- implemented in [app/index.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/index.tsx)
+- based on locally persisted onboarding completion state
+
+### Premium gates
+
+Status: Partial but active
+
+Current pattern:
+
+- premium-gated UI surfaces show `PremiumLockedBanner`
+- locked actions generally route to `/premium`
+- some product rules are enforced in the domain layer, but billing is still mocked
+
+### Permission gates
+
+Status: Partial
+
+Current reality:
+
+- screen time uses a real permission/fallback gate pattern in [app/(tabs)/screen-time/index.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/(tabs)/screen-time/index.tsx)
+- onboarding permission cards are still mostly illustrative and not a fully wired system permission flow
+
+### Journal lock gate
+
+Status: Partial but active
+
+Current reality:
+
+- [app/(tabs)/track/journal.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/(tabs)/track/journal.tsx) and [app/(tabs)/track/journal-entry.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/(tabs)/track/journal-entry.tsx) enforce unlock checks when journal lock is enabled
+- privacy settings for this gate live in [app/profile/privacy-security.tsx](/C:/Users/sudip/Desktop/Projects/MyApp/app/profile/privacy-security.tsx)
+- lock scope is journal routes; broader app-wide sensitive-route gating is not implemented
+
+## 9. Route Tree
+
+```text
 app/
-├─ _layout.tsx (Root Stack)
-│   ├─ onboarding/ (Stack) — shown once
-│   │   ├─ splash.tsx
-│   │   ├─ welcome.tsx
-│   │   ├─ intentions.tsx
-│   │   ├─ permissions.tsx
-│   │   └─ reveal.tsx
-│   │
-│   ├─ (tabs)/ (Bottom Tabs)
-│   │   ├─ index.tsx (HOME)
-│   │   ├─ habits/ (Stack)
-│   │   │   ├─ index.tsx
-│   │   │   ├─ add-edit.tsx
-│   │   │   └─ detail.tsx
-│   │   ├─ track/ (Stack)
-│   │   │   ├─ index.tsx (hub)
-│   │   │   ├─ bad-habits.tsx
-│   │   │   ├─ bad-habit-detail.tsx
-│   │   │   ├─ add-edit-bad-habit.tsx
-│   │   │   ├─ relapse-sheet.tsx
-│   │   │   ├─ journal.tsx
-│   │   │   ├─ journal-entry.tsx
-│   │   │   ├─ activity.tsx
-│   │   │   └─ log-activity.tsx
-│   │   ├─ goals/ (Stack)
-│   │   │   ├─ index.tsx
-│   │   │   ├─ add-edit.tsx
-│   │   │   └─ detail.tsx
-│   │   └─ screen-time/ (Stack)
-│   │       └─ index.tsx
-│   │
-│   ├─ profile/ (Stack)
-│   │   └─ index.tsx
-│   │
-│   └─ premium/ (Modal)
-│       └─ index.tsx
-│
-├─ components/ (reusable UI)
-├─ hooks/ (state management)
-├─ stores/ (local storage)
-├─ types/ (TypeScript types)
-└─ constants/ (design tokens)
+|-- _layout.tsx
+|-- index.tsx
+|-- oauthredirect.tsx
+|-- auth/
+|   |-- _layout.tsx
+|   |-- index.tsx
+|   |-- sign-in.tsx
+|   `-- create-account.tsx
+|-- onboarding/
+|   |-- _layout.tsx
+|   |-- splash.tsx
+|   |-- welcome.tsx
+|   |-- intentions.tsx
+|   |-- permissions.tsx
+|   `-- reveal.tsx
+|-- (tabs)/
+|   |-- _layout.tsx
+|   |-- index.tsx
+|   |-- habits/
+|   |-- track/
+|   |-- goals/
+|   `-- screen-time/
+|-- profile/
+|   |-- _layout.tsx
+|   |-- index.tsx
+|   `-- privacy-security.tsx
+`-- premium/
+    |-- _layout.tsx
+    `-- index.tsx
 ```
 
----
+## 10. Recommended Simplifications
 
-## 🎯 9. USER JOURNEYS
+These are suggested improvements, not all current behavior:
 
-### First-Time User:
-```
-Open App → Splash (2.3s) → Welcome (3 slides) → Intentions → Permissions → Dashboard
-```
+1. Keep `app/index.tsx` as the only documented launch gate and avoid describing `app/_layout.tsx` as a redirect controller.
+2. Treat `/auth` and `/oauthredirect` as callback/support routes in docs unless they become user-facing screens.
+3. Either remove or wire a real `screen-time/manage-limits` route before documenting that flow as available.
+4. Continue replacing placeholder settings rows with dedicated routes, following the `/profile/privacy-security` pattern.
 
-### Daily User — Morning Routine:
-```
-Open App → Home (check score) → Tap habits → Check off morning habits → Home → Write journal entry
-```
+## 11. Documentation Rule
 
-### Breaking a Bad Habit:
-```
-Home → Tap Bad Habit Card → Bad Habits List → Tap specific habit → Detail → Log urge → Relapse Sheet (if needed)
-```
+When navigation changes, update this file together with:
 
-### Tracking Goal Progress:
-```
-Home → Tap Goal Carousel → Goal Detail → Update progress → Back to Goals List → Filter by Active
-```
-
-### Monitoring Screen Time:
-```
-Home → Tab to Screen Time → View today's usage → Toggle to Week view → Set focus mode → Block distracting apps
-```
-
----
-
-## 🔐 10. DATA PRIVACY RULES
-
-| Module | Visibility | Sync | Notes |
-|--------|-----------|------|-------|
-| **Bad Habits** | Private only | ❌ Never synced | Always local-only, encrypted |
-| **Journal** | Private only | ❌ Never synced | Encrypted with SQLCipher |
-| **Habits** | User's own | ✅ Optional cloud sync | If premium enabled |
-| **Goals** | User's own | ✅ Optional cloud sync | If premium enabled |
-| **Screen Time** | Device-only | ❌ Never synced | Native Android API only |
-
----
-
-## 📝 Notes
-
-- **All navigation uses Expo Router** (file-based routing with React Navigation under the hood)
-- **Dynamic routes use `as any` cast** for TypeScript compatibility (per project conventions)
-- **Tab bar is custom** with pill-shaped active states and gradient-free design
-- **`unmountOnBlur: true`** on all tab screens (refreshes data on tab switch)
-- **Stack animations:** Slide from right for onboarding, default for other stacks
-- **Premium modal** uses `presentation: 'modal'` option in root layout
-
----
-
-**End of Flow Control Document**
+- [progress.md](/C:/Users/sudip/Desktop/Projects/MyApp/progress.md) for implementation status
+- [requirements.md](/C:/Users/sudip/Desktop/Projects/MyApp/requirements.md) for product expectations
+- [README.md](/C:/Users/sudip/Desktop/Projects/MyApp/README.md) when the high-level app structure changes

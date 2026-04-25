@@ -1,6 +1,6 @@
 # Kaarma - Product Requirements
 
-> Last updated: 2026-04-20
+> Last updated: 2026-04-22
 > Scope: realistic product requirements for the current codebase and near-term MVP
 
 For verified implementation status, use `progress.md`. This file defines product expectations and intended near-term scope.
@@ -27,12 +27,13 @@ The project is currently a working prototype with real persistence and partial h
 - support onboarding, habits, goals, journal, bad habits, activity logging, profile, premium upsell, and a screen-time dashboard
 - support Google sign-in through Firebase
 - support a hybrid data path for profile, habits, goals, and activities
+- schedule local notifications for habits and goals on native builds when permission is granted
 
 ### What should not yet be expected
 
 - production-grade premium billing
-- encrypted local storage for sensitive modules
-- fully implemented notifications
+- production-grade encryption lifecycle tooling (for example key rotation/export-safe workflows)
+- production-grade notification delivery or deep notification settings
 - mature sync conflict handling
 - fully functional app blocking/scheduling
 - release-ready testing, export, deletion, and privacy tooling
@@ -89,6 +90,7 @@ Expected behavior:
 Current expectation:
 
 - onboarding is implemented and redirect logic is active
+- users who tap "I already have an account" skip the onboarding sequence and go straight to sign-in
 
 ### 6.2 Auth and Profile
 
@@ -101,6 +103,7 @@ Expected behavior:
 Current expectation:
 
 - sign-in and create-account screens are Google-first
+- auth is reachable both from the guest profile screen and from the onboarding skip action
 - profile editing exists
 - auth state still mixes Firebase session behavior with local flags and needs cleanup
 
@@ -117,7 +120,8 @@ Current expectation:
 
 - habits are one of the strongest implemented modules
 - streak, best-streak, and at-risk logic exist
-- reminders/notifications are still missing
+- local reminder scheduling now exists through `expo-notifications`
+- daily-habit streak-risk alerts are now scheduled locally in the evening
 - free-tier history rules are not enforced yet
 
 ### 6.4 Goals
@@ -132,6 +136,8 @@ Current expectation:
 
 - goal CRUD and milestone toggling work
 - progress updates are stored
+- goals are standalone and are not linked to habits in the current UI flow
+- active goals with target dates now schedule local deadline nudges
 - free-tier caps and premium extras are not enforced yet
 
 ### 6.5 Journal
@@ -149,7 +155,8 @@ Current expectation:
 - journal list and editor work with local persistence
 - search is lightweight local filtering, not a full rich search system
 - editor is plain text, not rich text
-- biometric lock, encryption, and photo attachments are not implemented
+- biometric lock and encrypted local persistence are implemented
+- photo attachments are not implemented
 
 ### 6.6 Bad Habits / Recovery
 
@@ -165,7 +172,7 @@ Current expectation:
 - list, detail, add/edit, and relapse flows exist
 - recovery metrics exist in store logic
 - module is local-only
-- encryption is still missing and should not be implied as complete
+- encrypted local persistence is implemented for bad-habit and urge-event records
 
 ### 6.7 Activity Log
 
@@ -254,11 +261,14 @@ Required:
 
 Not yet complete:
 
-- encrypted local storage for sensitive modules
-- biometric lock
 - robust export/delete/privacy tooling
+- hardened key lifecycle strategy (rotation/recovery policies)
 
-Until encryption exists, product copy must not claim that sensitive data is encrypted at rest.
+Current implementation note:
+
+- sensitive local modules now use encrypted local persistence
+- native builds store the encryption key in secure key storage
+- web keeps a development fallback key in local storage and should not be treated as high-security storage
 
 ## 10. MVP Definition
 
@@ -285,7 +295,7 @@ The project should not be considered release-ready until these are addressed:
 
 - premium and free-tier rules are enforced
 - sensitive local data has a real encryption strategy
-- notifications are implemented or intentionally removed from scope
+- notification behavior is QA'd on target native builds and intentionally scoped
 - lint warnings are cleaned up
 - test coverage exists for core domain logic
 - runtime QA is completed for online/offline/auth/sync flows
@@ -309,10 +319,17 @@ The project should not be considered release-ready until these are addressed:
 ### Phase 3
 
 - implement privacy/security hardening
-- add notifications
-- improve screen-time completion
+- complete key lifecycle hardening and broader privacy tooling
 
 ### Phase 4
+
+- add notifications and lifecycle polish
+
+### Phase 5
+
+- improve screen-time completion
+
+### Phase 6
 
 - add tests, QA coverage, and release configuration
 

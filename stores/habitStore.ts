@@ -1,8 +1,17 @@
 import type { Habit, HabitCompletion } from '../types/models';
 import { getHabitRepository } from '@/repositories/factory';
+import { syncManagedNotificationsAsync } from '@/services/notifications';
 
 function repo() {
   return getHabitRepository();
+}
+
+async function syncNotificationsAfterHabitChange(): Promise<void> {
+  try {
+    await syncManagedNotificationsAsync();
+  } catch (error) {
+    console.warn('Failed to sync notifications after habit change', error);
+  }
 }
 
 export function todayStr(): string {
@@ -44,15 +53,20 @@ export async function saveHabits(habits: Habit[]): Promise<void> {
 export async function addHabit(
   data: Omit<Habit, 'id' | 'createdAt' | 'isArchived' | 'streakShieldsRemaining'>,
 ): Promise<Habit[]> {
-  return repo().addHabit(data);
+  const habits = await repo().addHabit(data);
+  await syncNotificationsAfterHabitChange();
+  return habits;
 }
 
 export async function updateHabit(id: string, updates: Partial<Habit>): Promise<Habit | null> {
-  return repo().updateHabit(id, updates);
+  const habit = await repo().updateHabit(id, updates);
+  await syncNotificationsAfterHabitChange();
+  return habit;
 }
 
 export async function deleteHabit(id: string): Promise<void> {
   await repo().deleteHabit(id);
+  await syncNotificationsAfterHabitChange();
 }
 
 // ─── Completions ─────────────────────────────────────────────────────────────
@@ -70,11 +84,14 @@ export async function saveCompletions(completions: HabitCompletion[]): Promise<v
 }
 
 export async function markHabitComplete(habitId: string): Promise<HabitCompletion> {
-  return repo().markHabitComplete(habitId);
+  const completion = await repo().markHabitComplete(habitId);
+  await syncNotificationsAfterHabitChange();
+  return completion;
 }
 
 export async function unmarkHabitComplete(habitId: string): Promise<void> {
   await repo().unmarkHabitComplete(habitId);
+  await syncNotificationsAfterHabitChange();
 }
 
 // ─── Streak & Risk Logic ─────────────────────────────────────────────────────

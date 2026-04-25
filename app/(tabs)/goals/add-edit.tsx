@@ -6,18 +6,20 @@ import {
   ScrollView,
   TextInput,
   Pressable,
-  Switch,
   Alert,
+  Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LoadingState } from '@/components/LoadingState';
 import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
+import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
 import { CommonStyles } from '@/constants/commonStyles';
 import { useCountLimitedFeatureGate } from '@/hooks/useFeatureGate';
 import { safeBack } from '@/navigation/safeBack';
+import { isCountLimitedFeatureLockedError } from '@/services/featureAccess';
 import { addGoal, getActiveGoalCount, updateGoal, getGoalById } from '@/stores/goalStore';
 import {
   GoalCategory,
@@ -33,6 +35,74 @@ function getDateString() {
     month: 'long',
     day: 'numeric',
   });
+}
+
+function parseGoalDate(value: string | null | undefined) {
+  if (!value) return new Date();
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function formatGoalDate(value: string | null | undefined) {
+  if (!value) return 'Choose a date (or leave empty)';
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Choose a date (or leave empty)';
+  }
+
+  return parsed.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function toStoredGoalDate(date: Date) {
+  const normalized = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    12,
+    0,
+    0,
+    0
+  );
+  return normalized.toISOString();
+}
+
+const CALENDAR_DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+function getMonthStart(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function getCalendarMonthDays(displayMonth: Date) {
+  const year = displayMonth.getFullYear();
+  const month = displayMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const daysInMonth = lastDay.getDate();
+  const leadingEmptyDays = firstDay.getDay();
+  const cells: (number | null)[] = [];
+
+  for (let i = 0; i < leadingEmptyDays; i += 1) {
+    cells.push(null);
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    cells.push(day);
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push(null);
+  }
+
+  return {
+    label: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    cells,
+  };
 }
 
 const CATEGORIES = [
@@ -69,8 +139,9 @@ export default function AddEditGoalScreen() {
   const [targetValue, setTargetValue] = useState('');
   const [unit, setUnit] = useState('');
   const [targetDate, setTargetDate] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => getMonthStart(new Date()));
   const [metricName, setMetricName] = useState('');
-  const [linkHabits, setLinkHabits] = useState(false);
 
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [milestoneInput, setMilestoneInput] = useState('');
@@ -88,7 +159,6 @@ export default function AddEditGoalScreen() {
         setUnit(goal.unit || '');
         setTargetDate(goal.targetDate || '');
         setMilestones(goal.milestones);
-        setLinkHabits(goal.linkedHabitIds.length > 0);
       }
       setIsLoading(false);
     };
@@ -110,6 +180,34 @@ export default function AddEditGoalScreen() {
 
   const removeMilestone = (index: number) => {
     setMilestones(milestones.filter((_, idx) => idx !== index));
+  };
+
+  const openDatePicker = () => {
+    setCalendarMonth(getMonthStart(parseGoalDate(targetDate)));
+    setShowDatePicker(true);
+  };
+
+  const handleSelectTargetDate = (day: number) => {
+    const selectedDate = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth(),
+      day
+    );
+    setTargetDate(toStoredGoalDate(selectedDate));
+    setShowDatePicker(false);
+  };
+
+  const handleClearTargetDate = () => {
+    setTargetDate('');
+    setShowDatePicker(false);
+  };
+
+  const goToPreviousCalendarMonth = () => {
+    setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1));
+  };
+
+  const goToNextCalendarMonth = () => {
+    setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1));
   };
 
   const handleSave = async () => {
@@ -161,6 +259,15 @@ export default function AddEditGoalScreen() {
       }
       safeBack(router, '/(tabs)/goals');
     } catch (error) {
+      if (isCountLimitedFeatureLockedError(error)) {
+        await goalGate.refresh();
+        Alert.alert('Premium Required', error.message, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => router.push('/premium' as any) },
+        ]);
+        return;
+      }
+
       console.error('Failed to save goal:', error);
       Alert.alert('Error', 'Failed to save goal. Please try again.');
     } finally {
@@ -172,6 +279,24 @@ export default function AddEditGoalScreen() {
     !goalGate.locked &&
     title.trim() &&
     (goalType !== 'QUANTITATIVE' || targetValue.trim());
+  const selectedDate = targetDate ? parseGoalDate(targetDate) : null;
+  const selectedDay =
+    selectedDate &&
+    selectedDate.getFullYear() === calendarMonth.getFullYear() &&
+    selectedDate.getMonth() === calendarMonth.getMonth()
+      ? selectedDate.getDate()
+      : null;
+  const calendarMonthData = getCalendarMonthDays(calendarMonth);
+
+  if (isLoading) {
+    return (
+      <LoadingState
+        fullScreen
+        title="Loading Goal"
+        message="Preparing the saved details for editing."
+      />
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -338,33 +463,40 @@ export default function AddEditGoalScreen() {
         )}
 
         <Text style={[styles.label, styles.labelSpaced]}>Target Date</Text>
-        <Pressable style={styles.datePickerButton}>
+        <Pressable
+          onPress={openDatePicker}
+          style={({ pressed }) => [
+            styles.datePickerButton,
+            showDatePicker && styles.datePickerButtonActive,
+            { transform: [{ scale: pressed ? 0.99 : 1 }] },
+          ]}
+        >
           <Ionicons name="calendar-outline" size={18} color={Colors.TextSecondary} />
-          <TextInput
-            style={styles.dateTextInput}
-            placeholder={targetDate || 'Choose a date (or leave empty)'}
-            placeholderTextColor={Colors.DustyTaupe}
-            value={targetDate}
-            onChangeText={setTargetDate}
-            onFocus={() => {}}
+          <Text
+            style={[
+              styles.dateText,
+              !targetDate && styles.dateTextPlaceholder,
+            ]}
+          >
+            {formatGoalDate(targetDate)}
+          </Text>
+          <Ionicons
+            name={showDatePicker ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={Colors.TextSecondary}
           />
         </Pressable>
-
-        <View style={[styles.linkHabitsRow, styles.labelSpaced]}>
-          <View style={styles.linkHabitsLeft}>
-            <Ionicons name="link-outline" size={18} color={Colors.TextSecondary} />
-            <View>
-              <Text style={styles.linkHabitsTitle}>Link Habits</Text>
-              <Text style={styles.linkHabitsDesc}>Connect goals to daily habits</Text>
-            </View>
-          </View>
-          <Switch
-            value={linkHabits}
-            onValueChange={setLinkHabits}
-            trackColor={{ false: Colors.BorderSubtle, true: Colors.SteelBlue + '80' }}
-            thumbColor={linkHabits ? Colors.SteelBlue : Colors.Surface}
-          />
-        </View>
+        {targetDate ? (
+          <Pressable
+            onPress={handleClearTargetDate}
+            style={({ pressed }) => [
+              styles.clearDateButton,
+              { opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Text style={styles.clearDateText}>Clear date</Text>
+          </Pressable>
+        ) : null}
 
         {goalType === 'MILESTONE' && (
           <>
@@ -446,6 +578,116 @@ export default function AddEditGoalScreen() {
           </LinearGradient>
         </Pressable>
       </View>
+
+      <Modal
+        visible={showDatePicker}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <View style={styles.calendarModalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowDatePicker(false)}
+          />
+          <View style={styles.calendarModalCard}>
+            <View style={styles.calendarModalHeader}>
+              <Text style={styles.calendarModalEyebrow}>TARGET DATE</Text>
+              <Text style={styles.calendarModalTitle}>Choose a day</Text>
+            </View>
+
+            <View style={styles.calendarHeader}>
+              <Pressable
+                onPress={goToPreviousCalendarMonth}
+                style={({ pressed }) => [
+                  styles.calendarNavButton,
+                  { transform: [{ scale: pressed ? 0.94 : 1 }] },
+                ]}
+              >
+                <Ionicons name="chevron-back" size={18} color={Colors.TextPrimary} />
+              </Pressable>
+              <View style={styles.calendarHeaderCenter}>
+                <Ionicons name="calendar-outline" size={18} color={Colors.SteelBlue} />
+                <Text style={styles.calendarTitle}>{calendarMonthData.label}</Text>
+              </View>
+              <Pressable
+                onPress={goToNextCalendarMonth}
+                style={({ pressed }) => [
+                  styles.calendarNavButton,
+                  { transform: [{ scale: pressed ? 0.94 : 1 }] },
+                ]}
+              >
+                <Ionicons name="chevron-forward" size={18} color={Colors.TextPrimary} />
+              </Pressable>
+            </View>
+
+            <View style={styles.calendarDays}>
+              {CALENDAR_DAY_LABELS.map((label, index) => (
+                <View key={`${label}-${index}`} style={styles.calendarDayLabel}>
+                  <Text style={styles.calendarDayLabelText}>{label}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {calendarMonthData.cells.map((day, index) => {
+                if (!day) {
+                  return (
+                    <View key={`empty-${index}`} style={styles.calendarCellWrap}>
+                      <View style={styles.calendarCellEmpty} />
+                    </View>
+                  );
+                }
+
+                const isSelected = day === selectedDay;
+
+                return (
+                  <View key={`day-${day}`} style={styles.calendarCellWrap}>
+                    <Pressable
+                      onPress={() => handleSelectTargetDate(day)}
+                      style={({ pressed }) => [
+                        styles.calendarCell,
+                        isSelected && styles.calendarCellSelected,
+                        { transform: [{ scale: pressed ? 0.94 : 1 }] },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.calendarCellText,
+                          isSelected && styles.calendarCellTextSelected,
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+
+            <View style={styles.calendarActions}>
+              <Pressable
+                onPress={handleClearTargetDate}
+                style={({ pressed }) => [
+                  styles.calendarActionSecondary,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Text style={styles.calendarActionSecondaryText}>Clear</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setShowDatePicker(false)}
+                style={({ pressed }) => [
+                  styles.calendarActionPrimary,
+                  { opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={styles.calendarActionPrimaryText}>Done</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -599,36 +841,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
   },
-  dateTextInput: {
+  datePickerButtonActive: {
+    borderColor: Colors.SteelBlue,
+    backgroundColor: Colors.SoftSky,
+  },
+  dateText: {
     flex: 1,
     ...Typography.Body1,
     color: Colors.TextPrimary,
   },
-  linkHabitsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.Surface,
-    borderColor: Colors.BorderSubtle,
-    borderWidth: 1,
-    borderRadius: Shapes.Input,
-    padding: Spacing.md,
-    marginTop: Spacing.md,
+  dateTextPlaceholder: {
+    color: Colors.DustyTaupe,
   },
-  linkHabitsLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    flex: 1,
+  clearDateButton: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
-  linkHabitsTitle: {
-    ...Typography.Body1,
-    color: Colors.TextPrimary,
-    fontWeight: '500',
-  },
-  linkHabitsDesc: {
+  clearDateText: {
     ...Typography.Caption,
-    color: Colors.TextSecondary,
+    color: Colors.SteelBlue,
+    fontWeight: '600',
   },
   milestoneRow: {
     flexDirection: 'row',
@@ -731,5 +964,135 @@ const styles = StyleSheet.create({
   ctaTextDisabled: {
     color: Colors.Surface,
     opacity: 0.7,
+  },
+  calendarModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.screenH,
+    backgroundColor: Colors.OverlayLight,
+  },
+  calendarModalCard: {
+    borderRadius: Shapes.Dialog,
+    backgroundColor: Colors.Surface,
+    padding: Spacing.md,
+    ...Shadows.Modal,
+  },
+  calendarModalHeader: {
+    marginBottom: Spacing.md,
+  },
+  calendarModalEyebrow: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    marginBottom: Spacing.xs,
+  },
+  calendarModalTitle: {
+    ...Typography.Headline2,
+    color: Colors.TextPrimary,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  calendarHeaderCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  calendarNavButton: {
+    width: 36,
+    height: 36,
+    borderRadius: Shapes.Badge,
+    backgroundColor: Colors.Background,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.BorderSubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calendarTitle: {
+    ...Typography.Body1,
+    color: Colors.TextPrimary,
+    fontWeight: '700',
+  },
+  calendarDays: {
+    flexDirection: 'row',
+    marginBottom: Spacing.sm,
+  },
+  calendarDayLabel: {
+    width: '14.2857%',
+    alignItems: 'center',
+  },
+  calendarDayLabelText: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -Spacing.xs / 2,
+  },
+  calendarCellWrap: {
+    width: '14.2857%',
+    paddingHorizontal: Spacing.xs / 2,
+    marginBottom: Spacing.xs,
+  },
+  calendarCell: {
+    height: 40,
+    borderRadius: Shapes.Input,
+    backgroundColor: Colors.Background,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.BorderSubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calendarCellEmpty: {
+    height: 40,
+  },
+  calendarCellSelected: {
+    backgroundColor: Colors.SteelBlue,
+    borderColor: Colors.SteelBlue,
+  },
+  calendarCellText: {
+    ...Typography.Body2,
+    color: Colors.TextPrimary,
+    fontWeight: '600',
+  },
+  calendarCellTextSelected: {
+    color: Colors.Surface,
+  },
+  calendarActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  calendarActionSecondary: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: Shapes.Button,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.Background,
+  },
+  calendarActionPrimary: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: Shapes.Button,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.WarmSand,
+  },
+  calendarActionSecondaryText: {
+    ...Typography.Body2,
+    color: Colors.TextSecondary,
+    fontWeight: '600',
+  },
+  calendarActionPrimaryText: {
+    ...Typography.Body2,
+    color: Colors.TextPrimary,
+    fontWeight: '700',
   },
 });

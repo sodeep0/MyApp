@@ -101,6 +101,7 @@ const styles = StyleSheet.create({
     ...Typography.Caption,
     color: Colors.Surface,
     fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
   statusBadge: {
     borderRadius: Shapes.Badge,

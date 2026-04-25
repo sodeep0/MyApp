@@ -1,4 +1,9 @@
-import React, { useState } from 'react';
+import {
+  areNotificationsEnabledAsync,
+  disableNotificationsAsync,
+  enableNotificationsAsync,
+} from '@/services/notifications';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,7 +43,7 @@ function PermissionCard({
         {granted ? (
           <View style={styles.grantedRow}>
             <Ionicons name="checkmark-circle" size={18} color={Colors.Success} />
-            <Text style={styles.grantedText}>Ready</Text>
+            <Text style={styles.grantedText}>Done</Text>
           </View>
         ) : (
           <View style={styles.actionRow}>
@@ -61,30 +66,37 @@ export default function PermissionsScreen() {
   const [notificationGranted, setNotificationGranted] = useState(false);
   const [statsGranted, setStatsGranted] = useState(false);
 
+  useEffect(() => {
+    let mounted = true;
+
+    const loadNotificationState = async () => {
+      const enabled = await areNotificationsEnabledAsync();
+      if (mounted) {
+        setNotificationGranted(enabled);
+      }
+    };
+
+    void loadNotificationState();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const requestNotificationPermission = async () => {
-    // TODO: Install expo-notifications and implement:
-    // const { status } = await Notifications.requestPermissionsAsync();
-    // setNotificationGranted(status === 'granted');
-    
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      Alert.alert(
-        'Enable Notifications',
-        'Kaarma will send you reminders for habits and streaks. You can change this anytime in Settings.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Enable',
-            onPress: () => {
-              // When expo-notifications is installed:
-              // const { status } = await Notifications.requestPermissionsAsync();
-              // setNotificationGranted(status === 'granted');
-              setNotificationGranted(true);
-            },
-          },
-        ]
-      );
-    } else {
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
       setNotificationGranted(true);
+      return;
+    }
+
+    const enabled = await enableNotificationsAsync();
+    setNotificationGranted(enabled);
+
+    if (!enabled) {
+      Alert.alert(
+        'Notifications remain off',
+        'You can enable them later from Settings whenever you want reminders and weekly reviews.',
+      );
     }
   };
 
@@ -139,7 +151,10 @@ export default function PermissionsScreen() {
           title="Notifications"
           description="Get habit reminders and streak alerts so you never miss a day."
           onAllow={requestNotificationPermission}
-          onSkip={() => setNotificationGranted(true)}
+          onSkip={async () => {
+            await disableNotificationsAsync();
+            setNotificationGranted(true);
+          }}
           granted={notificationGranted}
         />
         <PermissionCard

@@ -1,7 +1,7 @@
 # Kaarma - Implementation Progress
 
-> Last verified: 2026-04-20
-> Status: working Expo prototype with local-first data, hybrid cloud foundation, and partial premium/screen-time/auth support
+> Last verified: 2026-04-22
+> Status: working Expo prototype with local-first data, hybrid cloud foundation, local notifications, and partial premium/screen-time/auth support
 
 ## Snapshot
 
@@ -12,15 +12,17 @@ Kaarma is no longer just a UI shell. The app now has:
 - Local-only enforcement in code for sensitive modules: journal and bad habits
 - Google sign-in through Firebase using `@react-native-google-signin/google-signin`
 - Android screen-time integration groundwork via `expo-android-usagestats`
+- Local notification scheduling for habits, streak-risk alerts, goal deadlines, and weekly review
+- App-shell lifecycle polish for offline banners, shared loading states, and wider error recovery
 
-It is still not release-ready. Several product rules from the original vision remain incomplete, especially premium enforcement, encryption, notifications, testing, and production hardening.
+It is still not release-ready. Several product rules from the original vision remain incomplete, especially premium enforcement, notifications, testing, and production hardening.
 
 ## Verified Quality Gates
 
-- `npx tsc --noEmit`: passing on 2026-04-20
-- `npm run lint`: passing on 2026-04-20
+- `npx tsc --noEmit`: passing on 2026-04-22
+- `npm run lint`: passing on 2026-04-22
 - Current lint status: 0 errors, 0 warnings
-- Automated tests: not present
+- Automated tests: minimal storage-level tests now exist; broad app coverage is still missing
 
 ## Actual Stack
 
@@ -30,8 +32,9 @@ It is still not release-ready. Several product rules from the original vision re
 | Persistence | AsyncStorage wrapper in `storage/asyncStorage.ts` |
 | Auth | Firebase Auth + Google sign-in bridge |
 | Cloud data | Firestore repositories for profile, habits, goals, activities |
-| Sensitive data | Local-only stores for journal and bad habits |
+| Sensitive data | Local-only stores with encrypted local persistence for journal and bad habits |
 | Screen time | Android usage stats service + demo fallback UI |
+| Notifications | `expo-notifications` local scheduler + `expo-network` offline state |
 | Premium | Mock local subscription state in `useSubscription` |
 
 ## Status Legend
@@ -50,6 +53,7 @@ It is still not release-ready. Several product rules from the original vision re
 | Expo Router app structure | Verified | Tabs, onboarding, auth, profile, premium routes all exist |
 | Floating 5-tab navigation | Verified | Home, Habits, Track, Goals, Time |
 | Onboarding redirect | Verified | Redirect logic lives in `app/index.tsx` |
+| Onboarding skip-to-auth path | Verified | "I already have an account" now marks onboarding complete and routes to `/auth/sign-in` |
 | Root bootstrap | Verified | Fonts, auth bootstrap, sync trigger wiring in `app/_layout.tsx` |
 | Deep linking | Partial | Redirect/callback files exist, but routing/documentation is not finalized |
 
@@ -59,6 +63,7 @@ It is still not release-ready. Several product rules from the original vision re
 |------|--------|-------|
 | Sign in screen | Verified | Google-only flow is wired |
 | Create account screen | Verified | Google-only flow is wired |
+| Auth route entry from onboarding | Verified | Returning users can skip onboarding into sign-in |
 | Firebase session bridge | Verified | Google ID token is exchanged with Firebase |
 | Anonymous auth bootstrap | Verified | Used to support cloud context when available |
 | Profile display name editing | Verified | Local and repository-backed updates exist |
@@ -88,7 +93,8 @@ It is still not release-ready. Several product rules from the original vision re
 | `calculateStreak()` | Verified | Frequency-aware implementation exists |
 | `calculateBestStreak()` | Verified | Implemented in store layer |
 | `isHabitAtRisk()` | Verified | Implemented and used in UI |
-| Reminder notifications | Planned | No `expo-notifications` integration yet |
+| Reminder notifications | Verified | Habit reminder times now schedule local notifications through `expo-notifications` |
+| Streak-at-risk alerts | Partial | Daily habits now schedule evening local alerts; broader frequency-aware risk logic can still improve |
 | Free-tier 90-day history rule | Partial | Detail calendar now restricts older history for free users; broader history enforcement can still be centralized |
 
 ### Goals
@@ -96,10 +102,11 @@ It is still not release-ready. Several product rules from the original vision re
 | Area | Status | Notes |
 |------|--------|-------|
 | Goal list | Verified | Real data and filtering |
-| Goal detail | Verified | Quantitative progress, milestones, linked habits |
+| Goal detail | Verified | Quantitative progress and milestones |
 | Add/edit goal | Verified | Form and validation are wired |
 | Goal progress updates | Verified | Increment and milestone toggles are wired |
 | Goal cloud repository | Verified | Local + Firebase adapters exist |
+| Goal deadline nudges | Verified | Active goals with target dates now schedule local nudges one week, one day, and day-of |
 | Free-tier active goal cap | Partial | New-goal flow now blocks over the free limit and routes users to Premium |
 | Goal templates/recurrence | Planned | Not implemented |
 
@@ -113,7 +120,7 @@ It is still not release-ready. Several product rules from the original vision re
 | Relapse sheet | Verified | Modal flow exists |
 | Days clean logic | Verified | Current/best/total streak helpers exist |
 | Local-only policy | Verified | Store does not use Firebase |
-| Encryption | Planned | Misleading encryption copy was removed, but code-level encryption is still not implemented |
+| Encryption | Partial | Local encrypted persistence now protects bad-habit and urge-event data; deeper key lifecycle hardening is still pending |
 | Free-tier 2-item cap | Partial | New bad-habit flow now blocks over the free limit and routes users to Premium |
 
 ### Journal
@@ -126,8 +133,8 @@ It is still not release-ready. Several product rules from the original vision re
 | Auto-save | Verified | Debounced save path exists |
 | Rich text editor | Planned | Current editor is plain `TextInput` |
 | Photo attachments | Planned | Model fields exist, UI/storage do not |
-| Biometric lock | Planned | Not implemented |
-| Encryption | Planned | Local-only exists, encrypted storage does not |
+| Biometric lock | Verified | Journal screens now require device auth when lock is enabled |
+| Encryption | Partial | Journal entries now use encrypted local persistence with migration from plaintext storage |
 | Free-tier 60-entry cap | Partial | New journal-entry flow now blocks over the free limit and routes users to Premium |
 
 ### Activity log
@@ -181,25 +188,25 @@ It is still not release-ready. Several product rules from the original vision re
 | Area | Status | Notes |
 |------|--------|-------|
 | Local-only policy for sensitive modules | Verified | Journal and bad habits remain out of Firebase |
-| Encrypted local storage | Planned | Not implemented |
-| Notifications | Planned | Not implemented |
+| Encrypted local storage | Partial | Journal, bad habits, and urge events are encrypted locally with migration from legacy plaintext keys plus recovery-state detection/reset tooling |
+| Notifications | Partial | Local reminders now cover habit reminders, streak-risk alerts, goal deadline nudges, and weekly review; deeper delivery QA and settings granularity are still pending |
 | Export/delete flows | Planned | Not implemented |
-| Error boundaries | Partial | Present in screen-time only, not app-wide |
-| Offline UX messaging | Planned | No global offline banner |
+| Error boundaries | Partial | Root app shell now has a broad render boundary plus bootstrap retry state; async screen-level recovery is still limited |
+| Offline UX messaging | Verified | A global offline banner now explains local-first fallback and sync recovery |
+| Loading states | Partial | Shared loading states now cover the main hub/list/detail/edit fetch flows; broader long-tail coverage can still improve |
 | EAS config | Planned | `eas.json` not present |
-| Test coverage | Planned | No unit/integration/UI tests yet |
+| Test coverage | Partial | Storage-level tests now cover secure envelope encrypt/decrypt and migration-resolution logic; app-wide unit/integration/UI coverage is still missing |
 
 ## Key Gaps Blocking A Strong MVP
 
 1. Product rules are still only partially enforced:
    - free-tier limits are now gated in core create flows through shared helper logic, but not all repository layers enforce them yet
    - premium gates are improved but not universal
-   - encrypted handling for sensitive modules is still missing
+   - sensitive-data encryption exists, but key lifecycle hardening remains prototype-grade
 
 2. Some flows are still prototype-grade:
    - screen time management and blocking
    - notification delivery
-   - privacy/security screens
    - export and deletion flows
 
 3. Documentation had drifted from code:
@@ -207,12 +214,19 @@ It is still not release-ready. Several product rules from the original vision re
    - onboarding guard location
    - home header expectations
    - journal search behavior
+   - flow/control route descriptions
+
+4. Notification and lifecycle work is better but still prototype-grade:
+   - native-build/device QA for scheduled notifications
+   - richer notification settings and deep links
+   - broader async recovery beyond the main shell
 
 ## Roadmap
 
 ### Phase 1 - Documentation and consistency
 
 - Keep `progress.md`, `requirements.md`, and `AGENTS.md` aligned with the real codebase
+- Keep `flow-control.md` aligned with the actual Expo Router tree and placeholder status
 - Remove misleading encryption wording until encryption exists
 - Clarify which screens are production-grade versus prototype-grade
 
@@ -225,6 +239,7 @@ It is still not release-ready. Several product rules from the original vision re
 Status:
 
 - Core create-flow gating is now in place for goals, journal entries, and bad habits
+- Goal, journal, and bad-habit create limits are now enforced in the domain layer, not only in screens
 - Habit detail now restricts older history for free users
 - Activity edits are now limited to a 48-hour window at both the form and repository layers
 - Shared feature-gate helpers now drive the main free-tier and premium upgrade prompts across create flows, habit history, and screen-time placeholders
@@ -238,11 +253,27 @@ Status:
 - Add privacy/security settings UI
 - Add biometric lock flow for journal access
 
+Status:
+
+- Sensitive local modules (journal, bad habits, urge events) now persist through encrypted storage with plaintext migration
+- Profile settings now includes a dedicated Privacy & Security screen
+- Journal routes now enforce biometric/device-auth unlock when journal lock is enabled
+- Journal unlock checks now apply consistently across Home/Track entry points plus route-level guards for deep links
+- Privacy & Security now exposes secure-data recovery/reset when decryption/key mismatch is detected
+- Storage-level tests now verify secure envelope roundtrip and migration fallback behavior
+
 ### Phase 4 - Notifications and lifecycle polish
 
 - Add `expo-notifications`
 - Support habit reminders, streak-at-risk alerts, goal deadline nudges, and weekly review
 - Add offline banners, loading states, and wider error boundaries
+
+Status:
+
+- `expo-notifications` and `expo-network` are now wired into the app shell
+- Habit reminder schedules, daily streak-risk alerts, goal deadline nudges, and weekly review notifications now sync from real store data
+- Onboarding and profile notification controls now manage real permission-aware scheduling state
+- Global offline banner, shared loading states, and broader app-shell error recovery are now in place
 
 ### Phase 5 - Screen time completion
 

@@ -19,7 +19,9 @@ import {
   Spacing,
   Typography,
 } from "../../constants/theme";
+import { LoadingState } from "@/components/LoadingState";
 import { useDisplayName } from "../../hooks/useStore";
+import { navigateWithJournalAccess } from "../../services/journalGate";
 import {
   daysSinceQuit,
   getAllBadHabits,
@@ -36,6 +38,8 @@ import {
 } from "../../stores/habitStore";
 import {
   type BadHabit,
+  BadHabitCategory,
+  BadHabitSeverity,
   type Goal,
   type Habit,
   HabitCategory,
@@ -96,6 +100,26 @@ function getGoalAccent(goal: Goal) {
   return Colors.SoftSky;
 }
 
+function getBadHabitCategoryLabel(category: BadHabitCategory) {
+  if (category === BadHabitCategory.SUBSTANCE) return "Substance";
+  if (category === BadHabitCategory.DIGITAL) return "Digital";
+  if (category === BadHabitCategory.BEHAVIORAL) return "Behavioral";
+  return "Custom";
+}
+
+function getBadHabitSeverityLabel(severity: BadHabitSeverity) {
+  if (severity === BadHabitSeverity.MILD) return "Mild";
+  if (severity === BadHabitSeverity.MODERATE) return "Moderate";
+  return "Severe";
+}
+
+function getBadHabitAccent(category: BadHabitCategory) {
+  if (category === BadHabitCategory.SUBSTANCE) return Colors.Warning;
+  if (category === BadHabitCategory.DIGITAL) return Colors.SteelBlue;
+  if (category === BadHabitCategory.BEHAVIORAL) return Colors.Success;
+  return Colors.DustyTaupe;
+}
+
 const QUICK_ACTIONS = [
   {
     label: "Habit",
@@ -130,8 +154,8 @@ export default function HomeScreen() {
   const [badHabits, setBadHabits] = useState<BadHabit[]>([]);
   const [todayDone, setTodayDone] = useState<Set<string>>(new Set());
   const [streaks, setStreaks] = useState<Record<string, number>>({});
-  const [bestStreakDays, setBestStreakDays] = useState(0);
-  const [hasRelapsed, setHasRelapsed] = useState(false);
+  const [relapsedBadHabitIds, setRelapsedBadHabitIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
@@ -141,50 +165,51 @@ export default function HomeScreen() {
   );
 
   const loadAllData = async () => {
-    const [habitsData, goalsData, badHabitsData, urgeEvents] = await Promise.all([
-      getAllHabits(),
-      getAllGoals(),
-      getAllBadHabits(),
-      getAllUrgeEvents(),
-    ]);
+    setLoading(true);
 
-    setHabits(habitsData);
-    setGoals(goalsData);
-    setBadHabits(badHabitsData);
+    try {
+      const [habitsData, goalsData, badHabitsData, urgeEvents] = await Promise.all([
+        getAllHabits(),
+        getAllGoals(),
+        getAllBadHabits(),
+        getAllUrgeEvents(),
+      ]);
 
-    const doneSet = new Set<string>();
-    const streakMap: Record<string, number> = {};
+      setHabits(habitsData);
+      setGoals(goalsData);
+      setBadHabits(badHabitsData);
 
-    await Promise.all(
-      habitsData.map(async (habit) => {
-        const done = await getTodayCompletionsForHabit(habit.id);
-        if (done.length > 0) doneSet.add(habit.id);
+      const doneSet = new Set<string>();
+      const streakMap: Record<string, number> = {};
 
-        const completions = await getCompletionsForHabit(habit.id);
-        streakMap[habit.id] = calcStreak(
-          completions,
-          habit.frequency,
-          habit.weekDays,
-          habit.timesPerWeek,
-          habit.everyNDays,
-        );
-      }),
-    );
+      await Promise.all(
+        habitsData.map(async (habit) => {
+          const done = await getTodayCompletionsForHabit(habit.id);
+          if (done.length > 0) doneSet.add(habit.id);
 
-    setTodayDone(doneSet);
-    setStreaks(streakMap);
-
-    let bestDays = 0;
-    let relapsed = false;
-    badHabitsData.forEach((bh) => {
-      const hasBadHabitRelapse = urgeEvents.some(
-        (event) => event.badHabitId === bh.id && event.type === "RELAPSE",
+          const completions = await getCompletionsForHabit(habit.id);
+          streakMap[habit.id] = calcStreak(
+            completions,
+            habit.frequency,
+            habit.weekDays,
+            habit.timesPerWeek,
+            habit.everyNDays,
+          );
+        }),
       );
-      if (hasBadHabitRelapse) relapsed = true;
-      bestDays = Math.max(bestDays, daysSinceQuit(bh.quitDate));
-    });
-    setBestStreakDays(bestDays);
-    setHasRelapsed(relapsed);
+
+      setTodayDone(doneSet);
+      setStreaks(streakMap);
+
+      const relapsedIds = new Set(
+        urgeEvents
+          .filter((event) => event.type === "RELAPSE")
+          .map((event) => event.badHabitId),
+      );
+      setRelapsedBadHabitIds(relapsedIds);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const completedCount = todayDone.size;
@@ -192,7 +217,6 @@ export default function HomeScreen() {
   const activeGoals = goals.filter((g) => g.status === "ACTIVE");
   const maxStreak =
     Object.values(streaks).length > 0 ? Math.max(...Object.values(streaks)) : 0;
-  const recoveryPct = Math.max(0, Math.min(bestStreakDays / 7, 1));
   const displayNameStr = String(displayName).split(" ")[0] || "User";
 
   const dailyScore = useMemo(() => {
@@ -212,6 +236,9 @@ export default function HomeScreen() {
   const topHabits = [...habits]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 3);
+  const topBadHabits = [...badHabits]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5);
 
   const toggleComplete = async (habitId: string) => {
     if (todayDone.has(habitId)) {
@@ -243,6 +270,25 @@ export default function HomeScreen() {
     );
     setStreaks((prev) => ({ ...prev, [habitId]: streak }));
   };
+
+  const handleQuickActionPress = (route: string) => {
+    if (route.includes("/track/journal")) {
+      void navigateWithJournalAccess(router, route);
+      return;
+    }
+
+    router.push(route as any);
+  };
+
+  if (loading) {
+    return (
+      <LoadingState
+        fullScreen
+        title="Loading Home"
+        message="Gathering today's habits, goals, and recovery check-ins."
+      />
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}> 
@@ -310,7 +356,7 @@ export default function HomeScreen() {
           {QUICK_ACTIONS.map((action) => (
             <Pressable
               key={action.label}
-              onPress={() => router.push(action.route as any)}
+              onPress={() => handleQuickActionPress(action.route)}
               style={({ pressed }) => [
                 styles.quickCard,
                 { transform: [{ scale: pressed ? 0.98 : 1 }] },
@@ -478,48 +524,102 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <Pressable
-          onPress={() => router.push("/(tabs)/track/bad-habits" as any)}
-          style={({ pressed }) => [
-            styles.recoveryCard,
-            { transform: [{ scale: pressed ? 0.99 : 1 }] },
-          ]}
-        >
-          <View style={styles.recoveryTopRow}>
-            <View style={styles.recoveryIconBox}>
-              <Ionicons name="warning-outline" size={22} color={Colors.Warning} />
-            </View>
-
-            <View style={styles.recoveryPill}>
-              <Text style={styles.recoveryPillText}>private</Text>
-            </View>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Bad Habits</Text>
+            <Pressable onPress={() => router.push("/(tabs)/track/bad-habits" as any)}>
+              <Text style={styles.sectionAction}>See all</Text>
+            </Pressable>
           </View>
 
-          <Text style={styles.recoveryOverline}>Bad Habits</Text>
-          <Text style={styles.recoveryTitle}>
-            {badHabits.length === 0
-              ? "Start your recovery tracker"
-              : hasRelapsed
-                ? "Recovery reset"
-                : `${bestStreakDays} clean days`}
-          </Text>
-          <Text style={styles.recoveryCaption}>
-            {badHabits.length === 0
-              ? "Tap to set up private tracking"
-              : hasRelapsed
-                ? "Log slip-ups and get back on track"
-                : "Keep your streak alive"}
-          </Text>
+          {topBadHabits.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="shield-checkmark-outline" size={24} color={Colors.DustyTaupe} />
+              <Text style={styles.emptyStateTitle}>No bad habits tracked</Text>
+              <Text style={styles.emptyStateCaption}>Add one to start your private recovery journey.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={topBadHabits}
+              horizontal
+              nestedScrollEnabled
+              keyExtractor={(habit) => habit.id}
+              contentContainerStyle={styles.badHabitListContent}
+              showsHorizontalScrollIndicator={false}
+              renderItem={({ item: badHabit }) => {
+                const daysClean = daysSinceQuit(badHabit.quitDate);
+                const relapsed = relapsedBadHabitIds.has(badHabit.id);
+                const progressPct = Math.round(Math.max(0, Math.min(daysClean / 7, 1)) * 100);
+                const accent = getBadHabitAccent(badHabit.category);
 
-          <View style={styles.recoveryBarTrack}>
-            <View
-              style={[
-                styles.recoveryBarFill,
-                { width: `${Math.max(Math.round(recoveryPct * 100), 6)}%` },
-              ]}
+                return (
+                  <Pressable
+                    onPress={() =>
+                      router.push(`/track/bad-habit-detail?id=${badHabit.id}` as any)
+                    }
+                    style={({ pressed }) => [
+                      styles.badHabitCard,
+                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
+                    ]}
+                  >
+                    <View style={styles.badHabitCardTop}>
+                      <View style={[styles.badHabitIconBox, { backgroundColor: accent + "14" }]}>
+                        <Ionicons name="warning-outline" size={20} color={accent} />
+                      </View>
+                      <View
+                        style={[
+                          styles.badHabitMetaPill,
+                          {
+                            backgroundColor: relapsed
+                              ? Colors.Danger + "16"
+                              : Colors.Success + "16",
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.badHabitMetaPillText,
+                            { color: relapsed ? Colors.Danger : Colors.Success },
+                          ]}
+                        >
+                          {relapsed ? "Relapse logged" : `${daysClean} clean days`}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.badHabitTitle} numberOfLines={2}>
+                      {badHabit.name || "Untitled habit"}
+                    </Text>
+
+                    <Text style={styles.badHabitCaption}>
+                      {getBadHabitCategoryLabel(badHabit.category)} · {getBadHabitSeverityLabel(badHabit.severity)}
+                    </Text>
+
+                    <Text style={styles.badHabitDate}>
+                      Since{" "}
+                      {new Date(badHabit.quitDate).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </Text>
+
+                    <View style={styles.badHabitBarTrack}>
+                      <View
+                        style={[
+                          styles.badHabitBarFill,
+                          {
+                            width: `${Math.max(progressPct, 4)}%`,
+                            backgroundColor: relapsed ? Colors.Danger : accent,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </Pressable>
+                );
+              }}
             />
-          </View>
-        </Pressable>
+          )}
+        </View>
       </ScrollView>
 
       <Pressable
@@ -545,13 +645,13 @@ export default function HomeScreen() {
           <View style={styles.sheet}>
             {QUICK_ACTIONS.map((action) => (
               <Pressable
-                key={action.label}
-                onPress={() => {
-                  setShowFAB(false);
-                  router.push(action.route as any);
-                }}
-                style={styles.sheetOption}
-              >
+              key={action.label}
+              onPress={() => {
+                setShowFAB(false);
+                handleQuickActionPress(action.route);
+              }}
+              style={styles.sheetOption}
+            >
                 <Ionicons name={action.icon as any} size={20} color={Colors.SteelBlue} />
                 <Text style={styles.sheetLabel}>{action.label}</Text>
               </Pressable>
@@ -845,70 +945,67 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: Shapes.PillButton,
   },
-  recoveryCard: {
-    marginTop: Spacing.sm,
+  badHabitListContent: {
+    paddingRight: Spacing.xs,
+  },
+  badHabitCard: {
+    width: 280,
     borderRadius: 30,
     padding: Spacing.md,
     backgroundColor: Colors.Surface,
     borderWidth: 1,
     borderColor: Colors.BorderSubtle,
+    marginRight: Spacing.sm,
     ...Shadows.Card,
   },
-  recoveryTopRow: {
+  badHabitCardTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: Spacing.sm,
   },
-  recoveryIconBox: {
+  badHabitIconBox: {
     width: 44,
     height: 44,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.Warning + "14",
   },
-  recoveryPill: {
+  badHabitMetaPill: {
     borderRadius: Shapes.PillButton,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,
-    backgroundColor: Colors.SoftSky + "32",
   },
-  recoveryPillText: {
+  badHabitMetaPillText: {
     ...Typography.Micro,
-    color: Colors.SteelBlue,
     textTransform: "uppercase" as const,
     fontWeight: "700" as const,
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
-  recoveryOverline: {
-    ...Typography.Micro,
-    color: Colors.Warning,
-    fontWeight: "700" as const,
-    textTransform: "uppercase" as const,
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  recoveryTitle: {
+  badHabitTitle: {
     ...Typography.Headline2,
     color: Colors.TextPrimary,
     marginBottom: 2,
   },
-  recoveryCaption: {
+  badHabitCaption: {
+    ...Typography.Body2,
+    color: Colors.TextSecondary,
+    marginBottom: 2,
+  },
+  badHabitDate: {
     ...Typography.Body2,
     color: Colors.TextSecondary,
     marginBottom: Spacing.md,
   },
-  recoveryBarTrack: {
+  badHabitBarTrack: {
     height: 8,
     borderRadius: Shapes.PillButton,
     backgroundColor: Colors.SurfaceContainerLow,
     overflow: "hidden",
   },
-  recoveryBarFill: {
+  badHabitBarFill: {
     height: "100%",
     borderRadius: Shapes.PillButton,
-    backgroundColor: Colors.Warning,
   },
   fab: {
     position: "absolute",

@@ -1,6 +1,6 @@
 # Data Policy (Hybrid Storage)
 
-This document is the source of truth for where each Kaarma module is stored in Phase 1.
+This document is the source of truth for where each Kaarma module is stored in the current MVP phase.
 
 ## Principles
 
@@ -20,8 +20,8 @@ This document is the source of truth for where each Kaarma module is stored in P
 | Habits | Local cache + Firestore | Yes | Includes completions; apply free-tier history logic client-side |
 | Goals | Local cache + Firestore | Yes | Active-goal free-tier limit enforced in store/domain layer |
 | Activity Log | Local cache + Firestore | Yes | Sync when online; queue writes when offline |
-| Journal | Local only (AsyncStorage / secure local store) | No | Always private, never synced or shared |
-| Bad Habits | Local only (AsyncStorage / secure local store) | No | Always private, never synced or shared |
+| Journal | Local only (encrypted local store) | No | Always private, never synced or shared |
+| Bad Habits | Local only (encrypted local store) | No | Always private, never synced or shared |
 | Subscription Flag | Local + optional Firestore mirror | Optional | Local required for gating continuity offline |
 
 ## Allowed Architecture Path
@@ -47,5 +47,5 @@ This document is the source of truth for where each Kaarma module is stored in P
 
 ## Future (Post-Phase 1)
 
-- Replace plain local storage for sensitive modules with encrypted local storage.
+- Harden sensitive-data key lifecycle (rotation/recovery policy) for encrypted local storage.
 - Add export tooling that keeps local-only modules local unless user explicitly exports.

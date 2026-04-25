@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, Animation } from '../../constants/theme';
 import { Button } from '../../components/Button';
+import { setOnboardingCompleted } from '../../stores/userStore';
 
 const SLIDES = [
   {
@@ -60,6 +61,11 @@ export default function WelcomeScreen() {
     }
   };
 
+  const handleExistingAccount = async () => {
+    await setOnboardingCompleted(true);
+    router.replace('/auth/sign-in' as any);
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: slide.bg }]}>
       <View style={[styles.illustrationArea, { paddingTop: insets.top + Spacing.xxl }]}>
@@ -102,7 +108,7 @@ export default function WelcomeScreen() {
         />
         <Pressable
           onPress={() => {
-            router.replace('/(tabs)' as any);
+            void handleExistingAccount();
           }}
           style={styles.linkRow}
         >

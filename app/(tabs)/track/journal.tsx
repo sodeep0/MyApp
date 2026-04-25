@@ -16,6 +16,7 @@ import { getCountLimitedFeatureGate } from '@/constants/featureLimits';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
 import { useSubscription } from '@/hooks/useSubscription';
 import { safeBack } from '@/navigation/safeBack';
+import { requestJournalAccess } from '@/services/journalGate';
 import { getAllJournalEntries } from '@/stores/journalStore';
 import type { JournalEntry } from '@/types/models';
 
@@ -54,13 +55,35 @@ export default function JournalListScreen() {
   const loadData = useCallback(async () => {
     const data = await getAllJournalEntries();
     setEntries(data);
-    setLoading(false);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
-    }, [loadData]),
+      let isActive = true;
+
+      const ensureAccessAndLoad = async () => {
+        setLoading(true);
+        const granted = await requestJournalAccess({
+          router,
+          onCancelled: () => safeBack(router, '/(tabs)/track'),
+          onUnavailableBack: () => safeBack(router, '/(tabs)/track'),
+        });
+        if (!isActive || !granted) {
+          setLoading(false);
+          return;
+        }
+
+        await loadData();
+        if (!isActive) return;
+        setLoading(false);
+      };
+
+      ensureAccessAndLoad();
+
+      return () => {
+        isActive = false;
+      };
+    }, [loadData, router]),
   );
 
   const filteredEntries = searchQuery

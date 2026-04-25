@@ -272,6 +272,7 @@ const styles = StyleSheet.create({
   percentText: {
     fontSize: 13,
     fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
   title: {
     ...Typography.Headline2,
@@ -320,6 +321,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 2,
     flexShrink: 0,
+    fontVariant: ['tabular-nums'],
   },
   progressUnitInline: {
     ...Typography.Body2,
@@ -423,6 +425,7 @@ const styles = StyleSheet.create({
   deadlineText: {
     ...Typography.Micro,
     fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   completedBadge: {
     flexDirection: 'row',

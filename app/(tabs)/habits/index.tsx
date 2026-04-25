@@ -9,6 +9,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LoadingState } from '@/components/LoadingState';
 import { CommonStyles } from '@/constants/commonStyles';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
 import { Button } from '@/components/Button';
@@ -316,11 +317,11 @@ export default function HabitListScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading habits...</Text>
-        </View>
-      </View>
+      <LoadingState
+        fullScreen
+        title="Loading Habits"
+        message="Refreshing streaks, weekly progress, and today&apos;s checkmarks."
+      />
     );
   }
 
@@ -436,15 +437,6 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     ...CommonStyles.listHeaderSubtitle,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    ...Typography.Body1,
-    color: Colors.TextSecondary,
   },
   scrollContent: {
     ...CommonStyles.listContent,

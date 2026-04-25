@@ -19,6 +19,11 @@ import { Button } from '@/components/Button';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useSubscription } from '@/hooks/useSubscription';
 import { signOutCurrentUser } from '@/services/firebase/auth';
+import {
+  areNotificationsEnabledAsync,
+  disableNotificationsAsync,
+  enableNotificationsAsync,
+} from '@/services/notifications';
 import { getDisplayName, updateDisplayName } from '@/stores/userStore';
 
 const SETTINGS_SECTIONS = [
@@ -40,7 +45,7 @@ const SETTINGS_SECTIONS = [
   {
     title: 'Data & Privacy',
     items: [
-      { icon: 'shield-checkmark-outline' as const, label: 'Privacy & Security', route: null, tint: Colors.Success },
+      { icon: 'shield-checkmark-outline' as const, label: 'Privacy & Security', route: '/profile/privacy-security', tint: Colors.Success },
       { icon: 'cloud-download-outline' as const, label: 'Data Export', route: null, tint: Colors.Warning },
       { icon: 'trash-outline' as const, label: 'Delete Account', route: null, tint: Colors.Danger },
     ],
@@ -95,15 +100,21 @@ export default function ProfileScreen() {
   const { isPremium } = useSubscription();
   const [displayName, setDisplayName] = useState('User');
   const [editingName, setEditingName] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
       let isMounted = true;
 
       const loadProfileState = async () => {
-        const storedName = await getDisplayName();
+        const [storedName, notificationsOn] = await Promise.all([
+          getDisplayName(),
+          areNotificationsEnabledAsync(),
+        ]);
         if (!isMounted) return;
+
+        setNotificationsEnabled(notificationsOn);
 
         if (storedName && storedName !== 'User') {
           setDisplayName(storedName);
@@ -123,6 +134,33 @@ export default function ProfileScreen() {
       };
     }, [authDisplayName]),
   );
+
+  const handleNotificationsToggle = async (nextValue: boolean) => {
+    if (notificationsBusy) return;
+
+    setNotificationsBusy(true);
+
+    try {
+      if (nextValue) {
+        const enabled = await enableNotificationsAsync();
+        setNotificationsEnabled(enabled);
+
+        if (!enabled) {
+          Alert.alert(
+            'Notifications remain off',
+            'Permission was not granted, so reminders and weekly reviews are still disabled.',
+          );
+        }
+
+        return;
+      }
+
+      await disableNotificationsAsync();
+      setNotificationsEnabled(false);
+    } finally {
+      setNotificationsBusy(false);
+    }
+  };
 
   const handleLogOut = async () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -307,8 +345,18 @@ export default function ProfileScreen() {
                       key={iIdx}
                       style={[styles.menuItem, iIdx < section.items.length - 1 && styles.menuItemBorder]}
                       onPress={() => {
+                        if (item.route) {
+                          router.push(item.route as any);
+                          return;
+                        }
+
                         if (item.label === 'Delete Account') {
-                          // Handle delete
+                          Alert.alert('Delete Account', 'Account deletion is not implemented yet.');
+                          return;
+                        }
+
+                        if (item.label !== 'Notifications') {
+                          Alert.alert(item.label, 'This option will be available soon.');
                         }
                       }}
                     >
@@ -324,7 +372,10 @@ export default function ProfileScreen() {
                       {item.label === 'Notifications' ? (
                         <Switch
                           value={notificationsEnabled}
-                          onValueChange={setNotificationsEnabled}
+                          onValueChange={(value) => {
+                            void handleNotificationsToggle(value);
+                          }}
+                          disabled={notificationsBusy}
                           trackColor={{ false: Colors.BorderSubtle, true: Colors.SteelBlue + '80' }}
                           thumbColor={notificationsEnabled ? Colors.SteelBlue : Colors.Surface}
                         />

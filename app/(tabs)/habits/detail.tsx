@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
+import { LoadingState } from '@/components/LoadingState';
 import {
   formatDateOnly,
   getHabitHistoryCutoffDate,
@@ -196,11 +197,11 @@ export default function HabitDetailScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <View style={styles.loadingContainer}>
-          <Text style={{ ...Typography.Body1, color: Colors.TextSecondary }}>Loading...</Text>
-        </View>
-      </View>
+      <LoadingState
+        fullScreen
+        title="Loading Habit"
+        message="Pulling recent completions, streaks, and progress insights."
+      />
     );
   }
 

@@ -16,6 +16,7 @@ import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme'
 import { CommonStyles } from '@/constants/commonStyles';
 import { useCountLimitedFeatureGate } from '@/hooks/useFeatureGate';
 import { safeBack } from '@/navigation/safeBack';
+import { isCountLimitedFeatureLockedError } from '@/services/featureAccess';
 import {
   addBadHabit,
   countActiveBadHabits,
@@ -111,6 +112,15 @@ export default function AddEditBadHabitScreen() {
       }
       safeBack(router, '/(tabs)/track/bad-habits');
     } catch (error) {
+      if (isCountLimitedFeatureLockedError(error)) {
+        await badHabitGate.refresh();
+        Alert.alert('Premium Required', error.message, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => router.push('/premium' as any) },
+        ]);
+        return;
+      }
+
       console.error('Failed to save bad habit:', error);
       Alert.alert('Error', 'Failed to save bad habit. Please try again.');
     } finally {

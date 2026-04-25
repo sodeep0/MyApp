@@ -16,7 +16,9 @@
       "adaptiveIcon": {
         "backgroundColor": "#81A6C6"
       },
-      "permissions": ["android.permission.PACKAGE_USAGE_STATS"],
+      "permissions": [
+        "android.permission.PACKAGE_USAGE_STATS"
+      ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous21.myapp"
@@ -36,7 +38,10 @@
           "backgroundColor": "#81A6C6"
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "@react-native-community/datetimepicker",
+      "expo-notifications",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

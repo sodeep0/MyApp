@@ -22,8 +22,8 @@ export function Card({
 }: CardProps) {
   if (hero) {
     const gradientColors = heroGradient === 'warm'
-      ? ([Colors.WarmSand, Colors.WarmSand] as const)
-      : ([Colors.SteelBlue, Colors.TextPrimary] as const);
+      ? ([Colors.Surface, Colors.WarmSand] as const)
+      : ([Colors.SoftSky, Colors.SteelBlue] as const);
 
     return (
       <LinearGradient
@@ -61,12 +61,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.Surface,
     borderRadius: Shapes.Card,
     borderColor: Colors.BorderSubtle,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     ...Shadows.Card,
   },
   heroContainer: {
     borderRadius: Shapes.HeroCard,
-    borderWidth: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.BorderSubtle + '40',
     ...Shadows.HeroCard,
   },
   heroShadow: {},
