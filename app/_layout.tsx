@@ -3,17 +3,9 @@ import { Button } from '@/components/Button';
 import { LoadingState } from '@/components/LoadingState';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { flushActivityQueue } from '@/repositories/firebase/activityRepository.firebase';
-import { flushGoalQueue } from '@/repositories/firebase/goalRepository.firebase';
-import { flushHabitQueue } from '@/repositories/firebase/habitRepository.firebase';
-import { flushUserQueue } from '@/repositories/firebase/userRepository.firebase';
 import { isFirebaseConfigured } from '@/services/firebase/app';
 import { ensureAnonymousAuth } from '@/services/firebase/auth';
 import { initializeJournalSecurityLifecycle } from '@/services/journalSecurity';
-import {
-  initializeNotificationsAsync,
-  syncManagedNotificationsAsync,
-} from '@/services/notifications';
 import { subscribeSyncTriggers } from '@/services/sync/networkState';
 import {
   Inter_400Regular,
@@ -29,7 +21,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { InteractionManager, StyleSheet, Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 void SplashScreen.preventAutoHideAsync();
@@ -55,6 +47,18 @@ export default function RootLayout() {
   const flushPendingSync = useCallback(async () => {
     if (!isFirebaseConfigured()) return;
 
+    const [
+      { flushUserQueue },
+      { flushHabitQueue },
+      { flushGoalQueue },
+      { flushActivityQueue },
+    ] = await Promise.all([
+      import('@/repositories/firebase/userRepository.firebase'),
+      import('@/repositories/firebase/habitRepository.firebase'),
+      import('@/repositories/firebase/goalRepository.firebase'),
+      import('@/repositories/firebase/activityRepository.firebase'),
+    ]);
+
     await Promise.allSettled([
       flushUserQueue(),
       flushHabitQueue(),
@@ -63,15 +67,29 @@ export default function RootLayout() {
     ]);
   }, []);
 
+  const initializeBackgroundServices = useCallback(async () => {
+    const {
+      initializeNotificationsAsync,
+      syncManagedNotificationsAsync,
+    } = await import('@/services/notifications');
+
+    await initializeNotificationsAsync();
+    await syncManagedNotificationsAsync();
+  }, []);
+
+  const syncNotificationSchedules = useCallback(async () => {
+    const { syncManagedNotificationsAsync } = await import('@/services/notifications');
+    await syncManagedNotificationsAsync();
+  }, []);
+
   const runBootstrap = useCallback(async () => {
     setBootstrapError(null);
     setBootstrapping(true);
+    let bootstrapSucceeded = false;
 
     try {
       await ensureAnonymousAuth();
-      await flushPendingSync();
-      await initializeNotificationsAsync();
-      await syncManagedNotificationsAsync();
+      bootstrapSucceeded = true;
     } catch (error) {
       console.error('Failed to bootstrap app shell', error);
       setBootstrapError('Kaarma could not finish starting up.');
@@ -79,7 +97,16 @@ export default function RootLayout() {
       setBootstrapping(false);
       await SplashScreen.hideAsync();
     }
-  }, [flushPendingSync]);
+
+    if (!bootstrapSucceeded) return;
+
+    InteractionManager.runAfterInteractions(() => {
+      void Promise.allSettled([
+        flushPendingSync(),
+        initializeBackgroundServices(),
+      ]);
+    });
+  }, [flushPendingSync, initializeBackgroundServices]);
 
   useEffect(() => {
     initializeJournalSecurityLifecycle();
@@ -92,9 +119,9 @@ export default function RootLayout() {
   useEffect(() => {
     return subscribeSyncTriggers(() => {
       void flushPendingSync();
-      void syncManagedNotificationsAsync();
+      void syncNotificationSchedules();
     });
-  }, [flushPendingSync]);
+  }, [flushPendingSync, syncNotificationSchedules]);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,

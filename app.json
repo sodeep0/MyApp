@@ -8,6 +8,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "productivity-app",
     "userInterfaceStyle": "automatic",
+    "jsEngine": "hermes",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
@@ -45,7 +46,8 @@
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": true,
+      "tsconfigPaths": true
     },
     "extra": {
       "router": {},
