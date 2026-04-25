@@ -7,7 +7,6 @@ import {
   ScrollView,
   Pressable,
   TextInput,
-  Switch,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,11 +18,7 @@ import { Button } from '@/components/Button';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useSubscription } from '@/hooks/useSubscription';
 import { signOutCurrentUser } from '@/services/firebase/auth';
-import {
-  areNotificationsEnabledAsync,
-  disableNotificationsAsync,
-  enableNotificationsAsync,
-} from '@/services/notifications';
+import { areNotificationsEnabledAsync } from '@/services/notifications';
 import { getDisplayName, updateDisplayName } from '@/stores/userStore';
 
 const SETTINGS_SECTIONS = [
@@ -37,7 +32,7 @@ const SETTINGS_SECTIONS = [
   {
     title: 'Preferences',
     items: [
-      { icon: 'notifications-outline' as const, label: 'Notifications', route: null, tint: Colors.Success },
+      { icon: 'notifications-outline' as const, label: 'Notifications', route: '/profile/notifications', tint: Colors.Success },
       { icon: 'moon-outline' as const, label: 'Appearance', route: null, tint: Colors.TextSecondary },
       { icon: 'globe-outline' as const, label: 'Language', route: null, tint: Colors.SteelBlue },
     ],
@@ -101,7 +96,6 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState('User');
   const [editingName, setEditingName] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [notificationsBusy, setNotificationsBusy] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -134,33 +128,6 @@ export default function ProfileScreen() {
       };
     }, [authDisplayName]),
   );
-
-  const handleNotificationsToggle = async (nextValue: boolean) => {
-    if (notificationsBusy) return;
-
-    setNotificationsBusy(true);
-
-    try {
-      if (nextValue) {
-        const enabled = await enableNotificationsAsync();
-        setNotificationsEnabled(enabled);
-
-        if (!enabled) {
-          Alert.alert(
-            'Notifications remain off',
-            'Permission was not granted, so reminders and weekly reviews are still disabled.',
-          );
-        }
-
-        return;
-      }
-
-      await disableNotificationsAsync();
-      setNotificationsEnabled(false);
-    } finally {
-      setNotificationsBusy(false);
-    }
-  };
 
   const handleLogOut = async () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -355,9 +322,7 @@ export default function ProfileScreen() {
                           return;
                         }
 
-                        if (item.label !== 'Notifications') {
-                          Alert.alert(item.label, 'This option will be available soon.');
-                        }
+                        Alert.alert(item.label, 'This option will be available soon.');
                       }}
                     >
                       <View style={[styles.menuIcon, { backgroundColor: item.tint + '18' }]}>
@@ -369,19 +334,12 @@ export default function ProfileScreen() {
                       ]}>
                         {item.label}
                       </Text>
-                      {item.label === 'Notifications' ? (
-                        <Switch
-                          value={notificationsEnabled}
-                          onValueChange={(value) => {
-                            void handleNotificationsToggle(value);
-                          }}
-                          disabled={notificationsBusy}
-                          trackColor={{ false: Colors.BorderSubtle, true: Colors.SteelBlue + '80' }}
-                          thumbColor={notificationsEnabled ? Colors.SteelBlue : Colors.Surface}
-                        />
-                      ) : (
-                        <Ionicons name="chevron-forward" size={16} color={Colors.TextSecondary} />
+                      {item.label === 'Notifications' && (
+                        <Text style={styles.trailingValue}>
+                          {notificationsEnabled ? 'On' : 'Off'}
+                        </Text>
                       )}
+                      <Ionicons name="chevron-forward" size={16} color={Colors.TextSecondary} />
                     </Pressable>
                   ))}
                 </View>

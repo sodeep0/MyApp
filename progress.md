@@ -1,7 +1,7 @@
 # Kaarma - Implementation Progress
 
-> Last verified: 2026-04-22
-> Status: working Expo prototype with local-first data, hybrid cloud foundation, local notifications, and partial premium/screen-time/auth support
+> Last verified: 2026-04-25
+> Status: working Expo prototype with local-first data, hybrid cloud foundation, real notification settings, and partial premium/screen-time enforcement
 
 ## Snapshot
 
@@ -10,7 +10,7 @@ Kaarma is no longer just a UI shell. The app now has:
 - Real local persistence for habits, goals, journal, bad habits, activities, onboarding, and profile basics
 - A hybrid repository layer for cloud-eligible modules: profile, habits, goals, activities
 - Local-only enforcement in code for sensitive modules: journal and bad habits
-- Google sign-in through Firebase using `@react-native-google-signin/google-signin`
+- Google sign-in and email/password auth through Firebase
 - Android screen-time integration groundwork via `expo-android-usagestats`
 - Local notification scheduling for habits, streak-risk alerts, goal deadlines, and weekly review
 - App-shell lifecycle polish for offline banners, shared loading states, and wider error recovery
@@ -19,8 +19,8 @@ It is still not release-ready. Several product rules from the original vision re
 
 ## Verified Quality Gates
 
-- `npx tsc --noEmit`: passing on 2026-04-22
-- `npm run lint`: passing on 2026-04-22
+- `npx tsc --noEmit`: passing on 2026-04-25
+- `npm run lint`: passing on 2026-04-25
 - Current lint status: 0 errors, 0 warnings
 - Automated tests: minimal storage-level tests now exist; broad app coverage is still missing
 
@@ -30,7 +30,7 @@ It is still not release-ready. Several product rules from the original vision re
 |------|------------------------|
 | App shell | Expo SDK 54, Expo Router 6, React Native 0.81.5, React 19 |
 | Persistence | AsyncStorage wrapper in `storage/asyncStorage.ts` |
-| Auth | Firebase Auth + Google sign-in bridge |
+| Auth | Firebase Auth with Google + email/password flows |
 | Cloud data | Firestore repositories for profile, habits, goals, activities |
 | Sensitive data | Local-only stores with encrypted local persistence for journal and bad habits |
 | Screen time | Android usage stats service + demo fallback UI |
@@ -61,14 +61,14 @@ It is still not release-ready. Several product rules from the original vision re
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Sign in screen | Verified | Google-only flow is wired |
-| Create account screen | Verified | Google-only flow is wired |
+| Sign in screen | Verified | Email/password and Google flows are wired |
+| Create account screen | Verified | Email/password and Google flows are wired |
 | Auth route entry from onboarding | Verified | Returning users can skip onboarding into sign-in |
 | Firebase session bridge | Verified | Google ID token is exchanged with Firebase |
 | Anonymous auth bootstrap | Verified | Used to support cloud context when available |
 | Profile display name editing | Verified | Local and repository-backed updates exist |
 | Auth/session consistency | Partial | Profile/auth screens follow Firebase auth state, and logout now clears cloud-backed local cache plus pending sync items before returning to guest mode; broader session centralization is still pending |
-| Email/password auth | Planned | Helper functions exist, UI flow does not use them |
+| Email/password auth | Verified | Sign-in and create-account screens now use Firebase email/password helpers with validation and error states |
 
 ### Home dashboard
 
@@ -156,7 +156,8 @@ It is still not release-ready. Several product rules from the original vision re
 | Android usage stats integration | Partial | Service exists and reads usage on supported Android setups |
 | Demo/fallback data mode | Verified | Non-Android and no-permission states can still preview UI |
 | Focus session UI | Partial | UI exists and is now premium-gated, but it is not a real blocking session |
-| Manage app limits screen | Planned | Link exists, destination screen does not |
+| Manage app limits screen | Verified | Dedicated route lists tracked apps and supports per-app set/clear daily limits via `screenTimeService` |
+| Limit persistence on dashboard | Verified | Saved app limits flow back into dashboard usage cards through shared report data |
 | App blocking | Planned | No native block enforcement |
 | Scheduling | Planned | Not implemented |
 | iOS support | Deferred | Requires platform-specific native work |
@@ -189,7 +190,7 @@ It is still not release-ready. Several product rules from the original vision re
 |------|--------|-------|
 | Local-only policy for sensitive modules | Verified | Journal and bad habits remain out of Firebase |
 | Encrypted local storage | Partial | Journal, bad habits, and urge events are encrypted locally with migration from legacy plaintext keys plus recovery-state detection/reset tooling |
-| Notifications | Partial | Local reminders now cover habit reminders, streak-risk alerts, goal deadline nudges, and weekly review; deeper delivery QA and settings granularity are still pending |
+| Notifications | Partial | Local reminders cover habit reminders, streak-risk alerts, goal deadline nudges, and weekly review, with a dedicated settings screen for per-type toggles and weekly review time; delivery QA and deep-link handling are still pending |
 | Export/delete flows | Planned | Not implemented |
 | Error boundaries | Partial | Root app shell now has a broad render boundary plus bootstrap retry state; async screen-level recovery is still limited |
 | Offline UX messaging | Verified | A global offline banner now explains local-first fallback and sync recovery |
@@ -205,8 +206,8 @@ It is still not release-ready. Several product rules from the original vision re
    - sensitive-data encryption exists, but key lifecycle hardening remains prototype-grade
 
 2. Some flows are still prototype-grade:
-   - screen time management and blocking
-   - notification delivery
+   - screen-time blocking/session enforcement
+   - notification delivery QA
    - export and deletion flows
 
 3. Documentation had drifted from code:
@@ -218,7 +219,7 @@ It is still not release-ready. Several product rules from the original vision re
 
 4. Notification and lifecycle work is better but still prototype-grade:
    - native-build/device QA for scheduled notifications
-   - richer notification settings and deep links
+   - notification deep links and richer interaction handling
    - broader async recovery beyond the main shell
 
 ## Roadmap
@@ -273,6 +274,7 @@ Status:
 - `expo-notifications` and `expo-network` are now wired into the app shell
 - Habit reminder schedules, daily streak-risk alerts, goal deadline nudges, and weekly review notifications now sync from real store data
 - Onboarding and profile notification controls now manage real permission-aware scheduling state
+- Profile now includes a dedicated notifications settings route with a master toggle, per-reminder toggles, and weekly review time editing
 - Global offline banner, shared loading states, and broader app-shell error recovery are now in place
 
 ### Phase 5 - Screen time completion
@@ -281,6 +283,12 @@ Status:
 - Replace focus-session placeholder behavior with real persisted sessions
 - Add scheduling model + UI
 - Decide whether Android-only support remains acceptable for MVP
+
+Status:
+
+- A dedicated `Manage App Limits` route now exists from the screen-time dashboard
+- Tracked apps can now store and clear per-app daily limits through `getAppLimit`/`setAppLimit`
+- Focus sessions, schedules, and true blocking behavior remain unfinished
 
 ### Phase 6 - Release prep
 

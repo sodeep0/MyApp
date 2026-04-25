@@ -1,6 +1,6 @@
 # Kaarma - Product Requirements
 
-> Last updated: 2026-04-22
+> Last updated: 2026-04-25
 > Scope: realistic product requirements for the current codebase and near-term MVP
 
 For verified implementation status, use `progress.md`. This file defines product expectations and intended near-term scope.
@@ -25,15 +25,16 @@ The project is currently a working prototype with real persistence and partial h
 - run as an Expo app with a custom/dev-client capable path for native features
 - store most user data locally and work offline for core flows
 - support onboarding, habits, goals, journal, bad habits, activity logging, profile, premium upsell, and a screen-time dashboard
-- support Google sign-in through Firebase
+- support Google sign-in and email/password auth through Firebase
 - support a hybrid data path for profile, habits, goals, and activities
 - schedule local notifications for habits and goals on native builds when permission is granted
+- expose a profile notifications settings screen for master enable/disable, reminder-type toggles, and weekly review time
 
 ### What should not yet be expected
 
 - production-grade premium billing
 - production-grade encryption lifecycle tooling (for example key rotation/export-safe workflows)
-- production-grade notification delivery or deep notification settings
+- production-grade notification delivery, deep links, or advanced notification controls
 - mature sync conflict handling
 - fully functional app blocking/scheduling
 - release-ready testing, export, deletion, and privacy tooling
@@ -102,9 +103,10 @@ Expected behavior:
 
 Current expectation:
 
-- sign-in and create-account screens are Google-first
+- sign-in and create-account screens support both email/password and Google auth
 - auth is reachable both from the guest profile screen and from the onboarding skip action
 - profile editing exists
+- profile now includes a dedicated notifications settings screen for reminder toggles and weekly review time
 - auth state still mixes Firebase session behavior with local flags and needs cleanup
 
 ### 6.3 Habits
@@ -202,7 +204,8 @@ Current expectation:
 - dashboard UI is implemented
 - Android usage stats service exists
 - unsupported environments can still render a demo/fallback UI
-- app-limits management, scheduling, and real blocking are not finished
+- app-limits management now exists with per-app set/clear daily limits persisted in `screenTimeService`
+- scheduling and real blocking are still not finished
 
 ### 6.9 Premium
 
@@ -275,7 +278,7 @@ Current implementation note:
 The near-term MVP should mean:
 
 - onboarding works
-- auth works for Google sign-in
+- auth works for Google sign-in and email/password
 - habits, goals, journal, bad habits, and activity log are all usable with persisted data
 - sensitive modules remain local-only
 - cloud-eligible modules have stable local/cloud repository behavior

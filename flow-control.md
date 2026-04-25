@@ -1,6 +1,6 @@
 # Kaarma - Flow Control And Route Map
 
-> Last updated: 2026-04-21
+> Last updated: 2026-04-25
 > Scope: verified current navigation flow for the Expo Router app, with placeholders called out explicitly
 
 This document describes the app as it exists in code today. When a route, action, or settings item is only partially implemented, it is marked as `Partial` or `Planned` instead of being described as fully available.
@@ -51,7 +51,7 @@ Verified sequence:
 | Splash | `/onboarding/splash` | Verified | Intro screen in onboarding stack |
 | Welcome | `/onboarding/welcome` | Verified | Carousel-style introduction with next/skip actions |
 | Intentions | `/onboarding/intentions` | Verified | Saves selected intentions locally |
-| Permissions | `/onboarding/permissions` | Partial | UI exists, but permission requests are still mostly placeholder/local-state only |
+| Permissions | `/onboarding/permissions` | Partial | Notifications are wired to real permission-aware scheduling state; screen-time permission remains mostly illustrative |
 | Reveal | `/onboarding/reveal` | Verified | Final confirmation screen; user taps to enter the app |
 
 ### Important onboarding rules
@@ -78,8 +78,8 @@ Routes live under `app/auth/*`.
 | Screen | Route | Status | Notes |
 | --- | --- | --- | --- |
 | Auth callback placeholder | `/auth` | Partial | Loading-style shell; not the main sign-in screen |
-| Sign in | `/auth/sign-in` | Verified | Google-first sign-in flow |
-| Create account | `/auth/create-account` | Verified | Google-first sign-up flow |
+| Sign in | `/auth/sign-in` | Verified | Email/password + Google sign-in flow |
+| Create account | `/auth/create-account` | Verified | Email/password + Google sign-up flow |
 | OAuth redirect | `/oauthredirect` | Partial | Callback/loading route used for auth session completion |
 
 ### Actual auth entry points
@@ -91,7 +91,7 @@ Users can reach auth from:
 
 ### Post-auth behavior
 
-After successful Google auth:
+After successful auth (Google or email/password):
 
 - sign-in routes to `/profile`
 - create-account routes to `/profile`
@@ -188,6 +188,7 @@ Status: Verified
 Routes under `app/(tabs)/screen-time/*`:
 
 - `/(tabs)/screen-time`
+- `/(tabs)/screen-time/manage-limits`
 
 Status: Partial
 
@@ -197,10 +198,10 @@ What exists today:
 - inline focus-session placeholder UI
 - inline blocked-app toggles
 - inline permission gate fallback
+- dedicated manage-app-limits route with set/clear persisted daily limits
 
 What does not exist yet:
 
-- a dedicated manage-app-limits route
 - real blocking/scheduling flows
 
 ## 7. Profile And Premium
@@ -218,12 +219,13 @@ What works:
 - inline display-name editing
 - logout flow
 - premium upsell badge
+- notifications route at `/profile/notifications`
 - dedicated privacy/security route at `/profile/privacy-security`
 
 What is still partial:
 
 - many settings rows are still presentational or placeholder only
-- notifications switch is local UI state
+- notifications has a dedicated route, but advanced interaction/deep-link behavior is still incomplete
 - delete account is not implemented
 - data export/help rows do not yet route to dedicated screens
 
@@ -310,6 +312,7 @@ app/
 |-- profile/
 |   |-- _layout.tsx
 |   |-- index.tsx
+|   |-- notifications.tsx
 |   `-- privacy-security.tsx
 `-- premium/
     |-- _layout.tsx
@@ -322,7 +325,7 @@ These are suggested improvements, not all current behavior:
 
 1. Keep `app/index.tsx` as the only documented launch gate and avoid describing `app/_layout.tsx` as a redirect controller.
 2. Treat `/auth` and `/oauthredirect` as callback/support routes in docs unless they become user-facing screens.
-3. Either remove or wire a real `screen-time/manage-limits` route before documenting that flow as available.
+3. Continue iterating the screen-time stack from the new manage-limits route into real blocking/session enforcement.
 4. Continue replacing placeholder settings rows with dedicated routes, following the `/profile/privacy-security` pattern.
 
 ## 11. Documentation Rule

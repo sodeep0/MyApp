@@ -563,6 +563,9 @@ function ScreenTimeContent() {
       : null;
 
   const topApps: AppUsage[] = report.apps.slice(0, 10);
+  const activeLimitCount = report.apps.filter(
+    (app) => (app.dailyLimitMs ?? 0) > 0,
+  ).length;
 
   const getCategoryUsage = (categoryKey: string) => {
     const apps = topApps.filter(
@@ -975,13 +978,23 @@ function ScreenTimeContent() {
           })}
         </View>
 
-        <AnimatedPressable style={styles.manageLimits}>
+        <AnimatedPressable
+          style={styles.manageLimits}
+          onPress={() => router.push("/(tabs)/screen-time/manage-limits" as any)}
+        >
           <Ionicons
             name="settings-outline"
             size={18}
             color={Colors.SteelBlue}
           />
-          <Text style={styles.manageLimitsText}>Manage App Limits</Text>
+          <View style={styles.manageLimitsCopy}>
+            <Text style={styles.manageLimitsText}>Manage App Limits</Text>
+            <Text style={styles.manageLimitsMeta}>
+              {activeLimitCount > 0
+                ? `${activeLimitCount} active limit${activeLimitCount === 1 ? "" : "s"}`
+                : "No limits set"}
+            </Text>
+          </View>
           <Ionicons
             name="chevron-forward"
             size={16}
@@ -1435,10 +1448,17 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.BorderSubtle,
     marginTop: Spacing.md,
   },
+  manageLimitsCopy: {
+    flex: 1,
+  },
   manageLimitsText: {
     ...Typography.Body1,
     color: Colors.SteelBlue,
     fontWeight: "600",
-    flex: 1,
+  },
+  manageLimitsMeta: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    marginTop: 2,
   },
 });

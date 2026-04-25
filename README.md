@@ -16,12 +16,14 @@ The current codebase is a working prototype moving toward MVP. Core local persis
 What works today:
 
 - onboarding flow
-- Google sign-in with Firebase
+- Google sign-in and email/password auth with Firebase
 - habits, goals, journal, bad habits, and activity logging with persisted data
 - profile/settings shell
+- profile notifications settings with reminder toggles and weekly review time
 - Privacy & Security settings screen with journal-lock controls
 - premium upsell flow with mock subscription state
 - Android-first screen-time dashboard groundwork
+- Manage App Limits screen with persisted per-app daily limits
 - repository-based local/cloud architecture for profile, habits, goals, and activities
 - encrypted local persistence for sensitive local modules (journal, bad habits, urge events)
 
@@ -29,7 +31,7 @@ What is still incomplete:
 
 - premium enforcement
 - hardened key lifecycle/recovery strategy for encryption
-- notifications
+- notification delivery QA and deep-link handling
 - export/delete/privacy tooling
 - release hardening and test coverage
 - full app blocking/scheduling behavior
