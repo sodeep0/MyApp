@@ -32,7 +32,7 @@ What is still incomplete:
 - premium enforcement
 - hardened key lifecycle/recovery strategy for encryption
 - notification delivery QA and deep-link handling
-- export/delete/privacy tooling
+- account/cloud deletion native QA
 - release hardening and test coverage
 - full app blocking/scheduling behavior
 
@@ -103,6 +103,8 @@ npm run firebase:emulators
 npm run firebase:rules:deploy
 npm run firebase:indexes:deploy
 ```
+
+EAS build profiles are defined in `eas.json` for development, internal preview, and production builds. Production credentials, store metadata, and native-device QA still need to be finalized before release.
 
 ## Development Notes
 

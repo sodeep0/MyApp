@@ -24,7 +24,10 @@ function normalizeSettings(raw: Partial<SecuritySettings> | null): SecuritySetti
       : DEFAULT_SECURITY_SETTINGS.journalUnlockTimeoutMinutes;
 
   return {
-    journalLockEnabled: Boolean(raw.journalLockEnabled),
+    journalLockEnabled:
+      typeof raw.journalLockEnabled === 'boolean'
+        ? raw.journalLockEnabled
+        : DEFAULT_SECURITY_SETTINGS.journalLockEnabled,
     journalUnlockTimeoutMinutes: timeout,
     relockOnBackground:
       typeof raw.relockOnBackground === 'boolean'

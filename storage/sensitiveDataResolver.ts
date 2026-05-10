@@ -22,20 +22,24 @@ export async function resolveSensitiveRead<T>({
 }: ResolveSensitiveReadOptions<T>): Promise<SensitiveReadResolution<T>> {
   let isCorrupted = false;
 
-  if (encrypted?.ciphertext) {
-    try {
-      const decrypted = await decryptEncrypted(encrypted);
-      if (decrypted !== null) {
-        return {
-          value: decrypted,
-          source: 'encrypted',
-          shouldMigrateLegacy: false,
-          isCorrupted: false,
-        };
+  if (encrypted !== null) {
+    if (!encrypted.ciphertext) {
+      isCorrupted = true;
+    } else {
+      try {
+        const decrypted = await decryptEncrypted(encrypted);
+        if (decrypted !== null) {
+          return {
+            value: decrypted,
+            source: 'encrypted',
+            shouldMigrateLegacy: false,
+            isCorrupted: false,
+          };
+        }
+        isCorrupted = true;
+      } catch {
+        isCorrupted = true;
       }
-      isCorrupted = true;
-    } catch {
-      isCorrupted = true;
     }
   }
 

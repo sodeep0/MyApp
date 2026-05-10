@@ -9,9 +9,10 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import type { ActivityLog } from '@/types/models';
+import { normalizeActivities } from '@/repositories/activityNormalization';
 import type { ActivityRepository } from '@/repositories/interfaces/activityRepository';
 import { activityLocalRepository } from '@/repositories/local/activityRepository.local';
-import { enqueueSyncItem, flushSyncQueue } from '@/services/sync/syncQueue';
+import { enqueueSyncItem, flushSyncQueue, PermanentSyncItemError } from '@/services/sync/syncQueue';
 import { getCloudContext, stripUndefined } from './common';
 
 function activitiesPath(uid: string): string {
@@ -29,19 +30,44 @@ async function deleteActivityInCloud(uid: string, db: Firestore, id: string): Pr
   await deleteDoc(doc(db, `${activitiesPath(uid)}/${id}`));
 }
 
+function requireQueuedActivity(payload: unknown): ActivityLog {
+  const [activity] = normalizeActivities([payload]);
+  if (!activity) {
+    throw new PermanentSyncItemError('queued activity payload is invalid');
+  }
+  return activity;
+}
+
+function requireQueuedId(payload: unknown, label: string): string {
+  if (typeof payload !== 'string' || payload.trim().length === 0) {
+    throw new PermanentSyncItemError(`queued ${label} id is invalid`);
+  }
+  return payload.trim();
+}
+
+function requireRepositoryId(id: string, label: string): string {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new Error(`${label} id must be a non-empty string.`);
+  }
+  return id.trim();
+}
+
 export async function flushActivityQueue(): Promise<void> {
   await flushSyncQueue('activities', async (item) => {
     const context = await getCloudContext();
     if (!context) throw new Error('cloud context unavailable');
 
     if (item.action === 'setActivity') {
-      await setActivityInCloud(context.uid, context.db, item.payload as ActivityLog);
+      await setActivityInCloud(context.uid, context.db, requireQueuedActivity(item.payload));
       return;
     }
 
     if (item.action === 'deleteActivity') {
-      await deleteActivityInCloud(context.uid, context.db, item.payload as string);
+      await deleteActivityInCloud(context.uid, context.db, requireQueuedId(item.payload, 'activity'));
+      return;
     }
+
+    throw new PermanentSyncItemError(`unsupported activities sync action "${item.action}"`);
   });
 }
 
@@ -53,7 +79,7 @@ export const activityFirebaseRepository: ActivityRepository = {
     await flushActivityQueue();
     const q = query(collection(context.db, activitiesPath(context.uid)), orderBy('loggedAt', 'desc'));
     const snap = await getDocs(q);
-    const entries = snap.docs.map((d) => d.data() as ActivityLog);
+    const entries = normalizeActivities(snap.docs.map((d) => d.data()));
     await activityLocalRepository.saveActivities(entries);
     return entries;
   },
@@ -64,16 +90,17 @@ export const activityFirebaseRepository: ActivityRepository = {
   },
 
   async saveActivities(entries) {
-    await activityLocalRepository.saveActivities(entries);
+    const normalizedEntries = normalizeActivities(entries);
+    await activityLocalRepository.saveActivities(normalizedEntries);
     const context = await getCloudContext();
     if (!context) {
-      for (const entry of entries) {
+      for (const entry of normalizedEntries) {
         await enqueueSyncItem('activities', 'setActivity', entry);
       }
       return;
     }
 
-    for (const entry of entries) {
+    for (const entry of normalizedEntries) {
       try {
         await setActivityInCloud(context.uid, context.db, entry);
       } catch {
@@ -119,18 +146,19 @@ export const activityFirebaseRepository: ActivityRepository = {
   },
 
   async deleteActivity(id) {
-    await activityLocalRepository.deleteActivity(id);
+    const normalizedId = requireRepositoryId(id, 'Activity');
+    await activityLocalRepository.deleteActivity(normalizedId);
     const context = await getCloudContext();
     if (!context) {
-      await enqueueSyncItem('activities', 'deleteActivity', id);
+      await enqueueSyncItem('activities', 'deleteActivity', normalizedId);
       return;
     }
 
     try {
-      await deleteActivityInCloud(context.uid, context.db, id);
+      await deleteActivityInCloud(context.uid, context.db, normalizedId);
       await flushActivityQueue();
     } catch {
-      await enqueueSyncItem('activities', 'deleteActivity', id);
+      await enqueueSyncItem('activities', 'deleteActivity', normalizedId);
     }
   },
 

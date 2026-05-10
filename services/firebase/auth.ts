@@ -16,16 +16,46 @@ let bootstrapPromise: Promise<User | null> | null = null;
 let authUnavailable = false;
 let hasLoggedAuthUnavailable = false;
 
+type SessionCleanupStep = {
+  name: string;
+  run: () => Promise<void>;
+};
+
+function getSessionCleanupErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function clearSignedInUserSessionData(): Promise<void> {
-  await Promise.all([
-    clearHabitLocalCache(),
-    clearGoalLocalCache(),
-    clearActivityLocalCache(),
-    clearUserLocalSessionData(),
-    clearSyncQueue(["user", "habits", "goals", "activities"]),
-    storage.removeItem("kaarma_user_email"),
-    storage.removeItem("kaarma_logged_in"),
-  ]);
+  const cleanupSteps: SessionCleanupStep[] = [
+    { name: "habit cache", run: clearHabitLocalCache },
+    { name: "goal cache", run: clearGoalLocalCache },
+    { name: "activity cache", run: clearActivityLocalCache },
+    { name: "user session", run: clearUserLocalSessionData },
+    {
+      name: "cloud sync queue",
+      run: () => clearSyncQueue(["user", "habits", "goals", "activities"]),
+    },
+    { name: "user email", run: () => storage.removeItem("kaarma_user_email") },
+    { name: "logged-in flag", run: () => storage.removeItem("kaarma_logged_in") },
+  ];
+
+  const results = await Promise.allSettled(cleanupSteps.map((step) => step.run()));
+  const failures = results.flatMap((result, index) => {
+    if (result.status === "fulfilled") {
+      return [];
+    }
+
+    return [
+      `${cleanupSteps[index].name}: ${getSessionCleanupErrorMessage(result.reason)}`,
+    ];
+  });
+
+  if (failures.length > 0) {
+    console.warn(`Sign-out cleanup failed for ${failures.join("; ")}`);
+    throw new Error(
+      `Sign-out cleanup failed for ${failures.map((failure) => failure.split(":")[0]).join(", ")}.`,
+    );
+  }
 }
 
 function logAuthUnavailable(message: string, error?: unknown): void {

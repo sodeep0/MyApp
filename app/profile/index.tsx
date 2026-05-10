@@ -18,6 +18,11 @@ import { Button } from '@/components/Button';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useSubscription } from '@/hooks/useSubscription';
 import { signOutCurrentUser } from '@/services/firebase/auth';
+import {
+  deleteSignedInAccountAndData,
+  isAccountDeletionRequiresRecentLoginError,
+} from '@/services/accountDeletion';
+import { resetLocalAppData } from '@/services/dataManagement';
 import { areNotificationsEnabledAsync } from '@/services/notifications';
 import { getDisplayName, updateDisplayName } from '@/stores/userStore';
 
@@ -41,8 +46,9 @@ const SETTINGS_SECTIONS = [
     title: 'Data & Privacy',
     items: [
       { icon: 'shield-checkmark-outline' as const, label: 'Privacy & Security', route: '/profile/privacy-security', tint: Colors.Success },
-      { icon: 'cloud-download-outline' as const, label: 'Data Export', route: null, tint: Colors.Warning },
-      { icon: 'trash-outline' as const, label: 'Delete Account', route: null, tint: Colors.Danger },
+      { icon: 'cloud-download-outline' as const, label: 'Data Export', route: '/profile/data-export', tint: Colors.Warning },
+      { icon: 'trash-outline' as const, label: 'Delete Local Data', route: null, tint: Colors.Danger },
+      { icon: 'trash-bin-outline' as const, label: 'Delete Account & Cloud Data', route: null, tint: Colors.Danger },
     ],
   },
   {
@@ -66,6 +72,27 @@ const GUEST_PREFERENCES = [
     label: 'Language',
     value: 'English',
     tint: Colors.SteelBlue,
+  },
+];
+
+const GUEST_DATA_PRIVACY = [
+  {
+    icon: 'shield-checkmark-outline' as const,
+    label: 'Privacy & Security',
+    route: '/profile/privacy-security',
+    tint: Colors.Success,
+  },
+  {
+    icon: 'cloud-download-outline' as const,
+    label: 'Data Export',
+    route: '/profile/data-export',
+    tint: Colors.Warning,
+  },
+  {
+    icon: 'trash-outline' as const,
+    label: 'Delete Local Data',
+    route: null,
+    tint: Colors.Danger,
   },
 ];
 
@@ -144,6 +171,73 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const handleDeleteLocalData = () => {
+    Alert.alert(
+      'Delete local data?',
+      'This clears Kaarma data stored on this device, including journal and bad-habit recovery records. It does not delete your Firebase account or data already synced to your account.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Local Data',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setEditingName(false);
+              if (isAuthenticated) {
+                await signOutCurrentUser();
+              }
+              await resetLocalAppData();
+              router.replace('/onboarding/welcome' as any);
+            } catch {
+              Alert.alert('Reset failed', 'Kaarma could not clear local data. Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteAccountAndCloudData = () => {
+    Alert.alert(
+      'Delete account and cloud data?',
+      'This deletes your Firebase account plus synced profile, habits, goals, and activity data, then clears local data on this device. Journal and bad-habit recovery records are local-only and are cleared only from this device. You may need to sign in again recently before Firebase allows account deletion.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setEditingName(false);
+              await deleteSignedInAccountAndData();
+              router.replace('/onboarding/welcome' as any);
+            } catch (error) {
+              if (isAccountDeletionRequiresRecentLoginError(error)) {
+                Alert.alert(
+                  'Sign in again',
+                  'Firebase requires a recent sign-in before deleting your account. Your cloud data deletion was requested first; sign in again and retry account deletion to finish removing the Firebase user.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Sign In',
+                      onPress: () => router.push('/auth/sign-in' as any),
+                    },
+                  ],
+                );
+                return;
+              }
+
+              Alert.alert(
+                'Account deletion failed',
+                'Kaarma could not delete your Firebase account or cloud data. Sign in again and retry.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleDisplayNameChange = (nextName: string) => {
     setDisplayName(nextName);
   };
@@ -194,6 +288,44 @@ export default function ProfileScreen() {
                   onPress={() => router.push('/auth/create-account' as any)}
                 />
               </View>
+            </View>
+
+            <View style={styles.guestSection}>
+              <View style={styles.guestSectionDivider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.guestSectionTitle}>Data & Privacy</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <Card style={styles.sectionCard} noShadow>
+                {GUEST_DATA_PRIVACY.map((item, idx) => (
+                  <Pressable
+                    key={item.label}
+                    style={[styles.menuItem, idx < GUEST_DATA_PRIVACY.length - 1 && styles.menuItemBorder]}
+                    onPress={() => {
+                      if (item.route) {
+                        router.push(item.route as any);
+                        return;
+                      }
+
+                      if (item.label === 'Delete Local Data') {
+                        handleDeleteLocalData();
+                      }
+                    }}
+                  >
+                    <View style={[styles.menuIcon, { backgroundColor: item.tint + '18' }]}>
+                      <Ionicons name={item.icon} size={16} color={item.tint} />
+                    </View>
+                    <Text style={[
+                      styles.menuLabel,
+                      item.label === 'Delete Local Data' && styles.menuLabelDanger,
+                    ]}>
+                      {item.label}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.TextSecondary} />
+                  </Pressable>
+                ))}
+              </Card>
             </View>
 
             <View style={styles.guestSection}>
@@ -317,8 +449,13 @@ export default function ProfileScreen() {
                           return;
                         }
 
-                        if (item.label === 'Delete Account') {
-                          Alert.alert('Delete Account', 'Account deletion is not implemented yet.');
+                        if (item.label === 'Delete Local Data') {
+                          handleDeleteLocalData();
+                          return;
+                        }
+
+                        if (item.label === 'Delete Account & Cloud Data') {
+                          handleDeleteAccountAndCloudData();
                           return;
                         }
 
@@ -330,7 +467,8 @@ export default function ProfileScreen() {
                       </View>
                       <Text style={[
                         styles.menuLabel,
-                        item.label === 'Delete Account' && styles.menuLabelDanger,
+                        (item.label === 'Delete Local Data' || item.label === 'Delete Account & Cloud Data')
+                          && styles.menuLabelDanger,
                       ]}>
                         {item.label}
                       </Text>

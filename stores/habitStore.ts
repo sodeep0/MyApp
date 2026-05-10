@@ -1,6 +1,8 @@
 import type { Habit, HabitCompletion } from '../types/models';
+import { filterHabitHistoryCompletions } from '@/constants/featureLimits';
 import { getHabitRepository } from '@/repositories/factory';
 import { syncManagedNotificationsAsync } from '@/services/notifications';
+import { getStoredPremiumState } from '@/services/subscription';
 
 function repo() {
   return getHabitRepository();
@@ -73,6 +75,15 @@ export async function deleteHabit(id: string): Promise<void> {
 
 export async function getCompletionsForHabit(habitId: string): Promise<HabitCompletion[]> {
   return repo().getCompletionsForHabit(habitId);
+}
+
+export async function getVisibleCompletionsForHabit(habitId: string): Promise<HabitCompletion[]> {
+  const [completions, isPremium] = await Promise.all([
+    repo().getCompletionsForHabit(habitId),
+    getStoredPremiumState(),
+  ]);
+
+  return filterHabitHistoryCompletions(completions, isPremium);
 }
 
 export async function getTodayCompletionsForHabit(habitId: string): Promise<HabitCompletion[]> {

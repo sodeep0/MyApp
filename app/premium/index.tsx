@@ -15,36 +15,35 @@ import { useSubscription } from '@/hooks/useSubscription';
 
 const PREMIUM_FEATURES = [
   { icon: 'time-outline', text: 'Unlimited habit history' },
-  { icon: 'shield-checkmark-outline', text: 'Streak shield — restore missed days' },
+  { icon: 'shield-checkmark-outline', text: 'Expanded streak insights' },
   { icon: 'documents-outline', text: 'Unlimited journal entries' },
-  { icon: 'image-outline', text: 'Photo attachments in journal' },
-  { icon: 'flag-outline', text: 'Unlimited goals & templates' },
-  { icon: 'phone-portrait-outline', text: 'Hard app blocking & focus sessions' },
-  { icon: 'calendar-outline', text: 'Scheduled blocking' },
-  { icon: 'cloud-upload-outline', text: 'Cloud backup & data export' },
+  { icon: 'flag-outline', text: 'Unlimited active goals' },
+  { icon: 'phone-portrait-outline', text: 'Focus sessions and blocked-app planning' },
+  { icon: 'calendar-outline', text: 'Screen-time planning tools when available' },
+  { icon: 'cloud-upload-outline', text: 'Cloud-eligible sync foundations and data export' },
 ];
 
 const PLANS = [
   {
     id: 'monthly',
     label: 'Monthly',
-    price: '$6.99',
-    period: '/month',
+    price: 'Preview',
+    period: '',
     highlight: false,
   },
   {
     id: 'yearly',
     label: 'Yearly',
-    price: '$49.99',
-    period: '/year',
+    price: 'Preview',
+    period: '',
     highlight: true,
-    savings: 'Save 40%',
+    savings: 'Preview',
   },
   {
     id: 'lifetime',
     label: 'Lifetime',
-    price: '$99.99',
-    period: ' once',
+    price: 'Preview',
+    period: '',
     highlight: false,
   },
 ];
@@ -76,9 +75,9 @@ export default function PremiumUpgradeScreen() {
           </View>
         </View>
 
-        <Text style={styles.headerTitle}>Upgrade to Premium</Text>
+        <Text style={styles.headerTitle}>Premium Preview</Text>
         <Text style={styles.headerSubtitle}>
-          Unlock everything. No limits, no distractions.
+          Try the current premium gates while billing is still mocked.
         </Text>
 
         <View style={styles.features}>
@@ -120,8 +119,7 @@ export default function PremiumUpgradeScreen() {
                   )}
                 </View>
                 <View style={styles.planPrice}>
-                  <Text style={styles.planDollar}>$</Text>
-                  <Text style={styles.planAmount}>{plan.price.replace('$', '')}</Text>
+                  <Text style={styles.planAmount}>{plan.price}</Text>
                   <Text style={styles.planPeriod}>{plan.period}</Text>
                 </View>
               </View>
@@ -137,20 +135,20 @@ export default function PremiumUpgradeScreen() {
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md }]}>
         <Button
-          label="Start 7-Day Free Trial"
+          label="Enable Premium Preview"
           onPress={handleSubscribe}
           fullWidth
         />
         <View style={styles.bottomLinks}>
           <Pressable onPress={handleRestore} style={styles.bottomLink}>
-            <Text style={styles.restoreText}>Restore Purchases</Text>
+            <Text style={styles.restoreText}>Refresh Preview</Text>
           </Pressable>
           <Text style={styles.divider}>{'\u2022'}</Text>
           <Pressable onPress={() => router.back()} style={styles.bottomLink}>
             <Text style={styles.notNowText}>Not now</Text>
           </Pressable>
         </View>
-        <Text style={styles.cancelText}>Cancel anytime. 7-day free trial included.</Text>
+        <Text style={styles.cancelText}>Preview only. Production billing is not connected yet.</Text>
       </View>
     </View>
   );

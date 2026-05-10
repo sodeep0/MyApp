@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ScrollView, Pressable, InteractionManager } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -93,10 +93,32 @@ export default function GoalListScreen() {
         </View>
       </View>
 
-      <ScrollView
+      <FlatList
+        data={filteredGoals}
+        keyExtractor={(goal) => goal.id}
+        renderItem={({ item: goal }) => (
+          <View style={styles.goalCardWrapper}>
+            <GoalCard
+              goal={goal}
+              onPress={() => router.push(`/goals/detail?id=${goal.id}` as any)}
+            />
+            {goal.status === GoalStatus.COMPLETED && (
+              <View style={styles.achievedStamp} pointerEvents="none">
+                <Ionicons name="checkmark-circle" size={16} color={Colors.Surface} />
+                <Text style={styles.achievedText}>ACHIEVED</Text>
+              </View>
+            )}
+          </View>
+        )}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-      >
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={7}
+        removeClippedSubviews
+        ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
+        ListHeaderComponent={(
+          <>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -151,25 +173,10 @@ export default function GoalListScreen() {
           </View>
         )}
 
-        <View style={styles.cardGrid}>
-          {filteredGoals.map((goal) => (
-            <View key={goal.id} style={styles.goalCardWrapper}>
-              <GoalCard
-                goal={goal}
-                onPress={() => router.push(`/goals/detail?id=${goal.id}` as any)}
-              />
-              {goal.status === GoalStatus.COMPLETED && (
-                <View style={styles.achievedStamp} pointerEvents="none">
-                  <Ionicons name="checkmark-circle" size={16} color={Colors.Surface} />
-                  <Text style={styles.achievedText}>ACHIEVED</Text>
-                </View>
-              )}
-            </View>
-          ))}
-        </View>
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
+          </>
+        )}
+        ListFooterComponent={<View style={{ height: 100 }} />}
+      />
 
       <Pressable
         style={[
@@ -264,8 +271,8 @@ const styles = StyleSheet.create({
     color: Colors.Surface,
     fontWeight: '600',
   },
-  cardGrid: {
-    gap: Spacing.md,
+  listSeparator: {
+    height: Spacing.md,
   },
   premiumBannerWrap: {
     marginBottom: Spacing.md,

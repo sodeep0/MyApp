@@ -33,7 +33,7 @@ export async function enforceCountLimitedFeatureGate(
   loadCount: () => Promise<number>,
   options: EnforceCountLimitedFeatureGateOptions = {},
 ): Promise<void> {
-  const enabled = options.enabled ?? true;
+  const enabled = options.enabled !== false;
   if (!enabled) return;
 
   const isPremium = await getStoredPremiumState();

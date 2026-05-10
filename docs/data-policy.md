@@ -9,7 +9,7 @@ This document is the source of truth for where each Kaarma module is stored in t
 - Journal and Bad Habits are local-only by product policy.
 - UI screens must not talk directly to Firebase; they go through stores/repositories.
 - Phase 1 cloud modules are Profile, Habits, Goals, and Activity.
-- Phase 1 auth mode is Firebase anonymous auth.
+- Phase 1 auth supports guest/local-first use plus Firebase auth for signed-in cloud-eligible modules.
 - Conflict policy is last-write-wins using `updatedAt`.
 
 ## Module Storage Matrix
@@ -43,6 +43,7 @@ This document is the source of truth for where each Kaarma module is stored in t
 - No `firebase/*` imports inside `stores/journalStore.ts`.
 - No `firebase/*` imports inside `stores/badHabitStore.ts`.
 - Repository factory routes `journal` and `badHabits` to local implementations only.
+- Account/cloud deletion only targets Profile, Habits, Goals, and Activity Firestore paths before local-device reset.
 - PR review includes a quick "storage policy compliance" check.
 
 ## Future (Post-Phase 1)

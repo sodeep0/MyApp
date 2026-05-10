@@ -1,6 +1,7 @@
 // Journal entry store (local-only by policy; never sync to Firebase)
 import type { JournalEntry } from '../types/models';
 import { generateUUID } from './baseStore';
+import { normalizeJournalEntries } from './journalEntryNormalization';
 import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
 import { getSensitiveItem, setSensitiveItem } from '@/storage/secureDataStorage';
 
@@ -8,12 +9,12 @@ const JOURNAL_KEY = 'kaarma_journal_entries';
 const JOURNAL_SECURE_KEY = 'kaarma_secure_journal_entries_v1';
 
 export async function getAllJournalEntries(): Promise<JournalEntry[]> {
-  const entries = await getSensitiveItem<JournalEntry[]>({
+  const entries = await getSensitiveItem<unknown>({
     secureKey: JOURNAL_SECURE_KEY,
     legacyKey: JOURNAL_KEY,
     defaultValue: [],
   });
-  return entries.sort((a, b) => b.date.localeCompare(a.date));
+  return normalizeJournalEntries(entries).sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export async function getJournalEntryById(id: string): Promise<JournalEntry | undefined> {
@@ -31,7 +32,7 @@ export async function saveJournalEntries(entries: JournalEntry[]): Promise<void>
   await setSensitiveItem({
     secureKey: JOURNAL_SECURE_KEY,
     legacyKey: JOURNAL_KEY,
-    value: entries,
+    value: normalizeJournalEntries(entries),
   });
 }
 

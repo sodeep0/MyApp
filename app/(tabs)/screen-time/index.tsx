@@ -10,12 +10,18 @@ import {
 } from "@/constants/theme";
 import {
   formatMs,
+  endFocusSession,
+  getActiveFocusSession,
+  getBlockedApps,
   getLimitPercent,
   getScreenTimeReport,
   getWeeklyReport,
   hasScreenTimePermission,
   isLimitReached,
+  setBlockedApp,
+  startFocusSession,
   type AppUsage,
+  type FocusSession,
   type ScreenTimeReport,
 } from "@/services/screenTimeService";
 import { Ionicons } from "@expo/vector-icons";
@@ -140,10 +146,19 @@ function getDateString() {
   });
 }
 
+function formatFocusRemaining(ms: number): string {
+  if (ms <= 0) return "0m";
+  if (ms < 60000) return `${Math.ceil(ms / 1000)}s`;
+  const totalMinutes = Math.ceil(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : `${totalMinutes}m`;
+}
+
 const FOCUS_DURATIONS = [
-  { label: "25", unit: "min" },
-  { label: "45", unit: "min" },
-  { label: "60", unit: "min" },
+  { label: "25", unit: "min", minutes: 25 },
+  { label: "45", unit: "min", minutes: 45 },
+  { label: "60", unit: "min", minutes: 60 },
 ];
 
 const PRIMARY_CONTAINER = "#5d6d99" as const;
@@ -419,8 +434,8 @@ function ScreenTimeContent() {
     weekTotalMs: number;
   } | null>(null);
   const [yesterdayMs, setYesterdayMs] = useState<number>(0);
-  const [focusModeActive, setFocusModeActive] = useState(false);
-  const [focusMinutesRemaining, setFocusMinutesRemaining] = useState(42);
+  const [focusSession, setFocusSession] = useState<FocusSession | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
   const [blockedApps, setBlockedApps] = useState<Record<string, boolean>>({});
 
   const insets = useSafeAreaInsets();
@@ -479,9 +494,37 @@ function ScreenTimeContent() {
     setLoading(false);
   }, [period, useDemoData, loadDemoData]);
 
+  const loadFocusState = React.useCallback(async () => {
+    const [savedBlockedApps, savedFocusSession] = await Promise.all([
+      getBlockedApps(),
+      getActiveFocusSession(),
+    ]);
+    setBlockedApps(savedBlockedApps);
+    setFocusSession(savedFocusSession);
+    setNowMs(Date.now());
+  }, []);
+
   React.useEffect(() => {
     loadData();
   }, [loadData]);
+
+  React.useEffect(() => {
+    void loadFocusState();
+  }, [loadFocusState]);
+
+  React.useEffect(() => {
+    if (!focusSession) return;
+
+    const timer = setInterval(() => {
+      const nextNow = Date.now();
+      setNowMs(nextNow);
+      if (focusSession.endsAt <= nextNow) {
+        void getActiveFocusSession(nextNow).then(setFocusSession);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [focusSession]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -489,17 +532,19 @@ function ScreenTimeContent() {
         if (!useDemoData) {
           void loadData();
         }
+        void loadFocusState();
       });
 
       return () => {
         task.cancel();
       };
-    }, [loadData, useDemoData]),
+    }, [loadData, loadFocusState, useDemoData]),
   );
 
-  const handleStartFocus = () => {
-    setFocusModeActive(true);
-    setFocusMinutesRemaining(42);
+  const handleStartFocus = async (durationMinutes: number) => {
+    const session = await startFocusSession(durationMinutes);
+    setFocusSession(session);
+    setNowMs(Date.now());
   };
 
   const handlePremiumUpgrade = () => {
@@ -515,14 +560,18 @@ function ScreenTimeContent() {
         {
           text: "End Session",
           style: "destructive",
-          onPress: () => setFocusModeActive(false),
+          onPress: async () => {
+            await endFocusSession();
+            setFocusSession(null);
+          },
         },
       ],
     );
   };
 
-  const toggleBlockedApp = (pkg: string) => {
-    setBlockedApps((prev) => ({ ...prev, [pkg]: !prev[pkg] }));
+  const toggleBlockedApp = async (pkg: string) => {
+    const nextBlockedApps = await setBlockedApp(pkg, !blockedApps[pkg]);
+    setBlockedApps(nextBlockedApps);
   };
 
   if (Platform.OS === "android" && permissionGranted === false) {
@@ -575,6 +624,9 @@ function ScreenTimeContent() {
   const activeLimitCount = report.apps.filter(
     (app) => (app.dailyLimitMs ?? 0) > 0,
   ).length;
+  const focusRemainingMs = focusSession
+    ? Math.max(focusSession.endsAt - nowMs, 0)
+    : 0;
 
   const getCategoryUsage = (categoryKey: string) => {
     const apps = topApps.filter(
@@ -596,12 +648,12 @@ function ScreenTimeContent() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {focusModeActive && (
+      {focusSession && (
         <View style={styles.focusBanner}>
           <View style={styles.focusBannerContent}>
             <Ionicons name="eye-off-outline" size={18} color={Colors.Surface} />
             <Text style={styles.focusBannerText}>
-              Focus Mode — {focusMinutesRemaining} min remaining
+              Focus Mode - {formatFocusRemaining(focusRemainingMs)} remaining
             </Text>
           </View>
           <Pressable onPress={endFocusMode} style={styles.focusBannerEnd}>
@@ -906,7 +958,7 @@ function ScreenTimeContent() {
               <Text style={styles.focusTitle}>Set Focus Session</Text>
             </View>
             <Text style={styles.focusDescription}>
-              Lock distractions and boost your productivity flow instantly.
+              Plan a focused stretch and keep selected apps visible in your focus plan.
             </Text>
             <View style={styles.focusButtonsRow}>
               {FOCUS_DURATIONS.map((duration) => (
@@ -916,7 +968,7 @@ function ScreenTimeContent() {
                   onPress={
                     focusSessionsGate.locked
                       ? handlePremiumUpgrade
-                      : handleStartFocus
+                      : () => handleStartFocus(duration.minutes)
                   }
                 >
                   <Text style={styles.focusBtnLabel}>{duration.label}</Text>
@@ -934,7 +986,7 @@ function ScreenTimeContent() {
             size={16}
             color={Colors.TextSecondary}
           />
-          <Text style={styles.sectionHeaderText}>Blocked Apps</Text>
+          <Text style={styles.sectionHeaderText}>Focus App Plan</Text>
         </View>
         <View style={styles.blockedAppsContainer}>
           {topApps.slice(0, 6).map((app, index) => {

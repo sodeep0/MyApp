@@ -7,5 +7,5 @@ export async function getStoredPremiumState(): Promise<boolean> {
 }
 
 export async function setStoredPremiumState(isPremium: boolean): Promise<void> {
-  await storage.setItem(PREMIUM_KEY, isPremium);
+  await storage.setItem(PREMIUM_KEY, isPremium === true);
 }

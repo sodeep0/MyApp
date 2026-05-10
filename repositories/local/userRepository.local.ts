@@ -1,6 +1,11 @@
 import { storage } from '@/storage/asyncStorage';
 import type { Intention, UserProfile } from '@/types/models';
 import type { UserRepository } from '@/repositories/interfaces/userRepository';
+import {
+  normalizeDisplayName,
+  normalizeSelectedIntentions,
+  normalizeUserProfile,
+} from '@/repositories/userNormalization';
 
 const USER_PROFILE_KEY = 'kaarma_user_profile';
 const ONBOARDING_KEY = 'kaarma_onboarding_completed';
@@ -8,11 +13,14 @@ export const DISPLAY_NAME_KEY = 'kaarma_display_name';
 const INTENTIONS_KEY = 'kaarma_selected_intentions';
 
 async function readProfile(): Promise<UserProfile | null> {
-  return storage.getItem<UserProfile>(USER_PROFILE_KEY);
+  return normalizeUserProfile(await storage.getItem<unknown>(USER_PROFILE_KEY));
 }
 
 async function writeProfile(profile: UserProfile): Promise<void> {
-  await storage.setItem(USER_PROFILE_KEY, profile);
+  const normalized = normalizeUserProfile(profile);
+  if (!normalized) return;
+
+  await storage.setItem(USER_PROFILE_KEY, normalized);
 }
 
 export async function clearUserLocalSessionData(): Promise<void> {
@@ -37,15 +45,16 @@ export const userLocalRepository: UserRepository = {
   },
 
   async updateDisplayName(name) {
-    await storage.setItem(DISPLAY_NAME_KEY, name);
+    const normalizedName = normalizeDisplayName(name);
+    await storage.setItem(DISPLAY_NAME_KEY, normalizedName);
     const profile = await readProfile();
     if (profile) {
-      await writeProfile({ ...profile, displayName: name });
+      await writeProfile({ ...profile, displayName: normalizedName });
     }
   },
 
   async getDisplayName() {
-    return (await storage.getItem<string>(DISPLAY_NAME_KEY)) ?? 'User';
+    return normalizeDisplayName(await storage.getItem<unknown>(DISPLAY_NAME_KEY));
   },
 
   async isOnboardingCompleted() {
@@ -53,14 +62,14 @@ export const userLocalRepository: UserRepository = {
   },
 
   async setOnboardingCompleted(completed) {
-    await storage.setItem(ONBOARDING_KEY, completed);
+    await storage.setItem(ONBOARDING_KEY, completed === true);
   },
 
   async getSelectedIntentions() {
-    return (await storage.getItem<Intention[]>(INTENTIONS_KEY)) ?? [];
+    return normalizeSelectedIntentions(await storage.getItem<unknown>(INTENTIONS_KEY, []));
   },
 
   async saveSelectedIntentions(intentions) {
-    await storage.setItem(INTENTIONS_KEY, intentions);
+    await storage.setItem(INTENTIONS_KEY, normalizeSelectedIntentions(intentions));
   },
 };

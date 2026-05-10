@@ -4,11 +4,21 @@ import {
   updateNotificationSettings,
 } from '@/stores/notificationStore';
 import {
+  createDateWithTime,
+  WEEKLY_REVIEW_WEEKDAY,
+  goalNudgeCandidates,
+  habitReminderCandidates,
+  isManagedNotificationRecord,
+  MANAGED_NOTIFICATION_PREFIX,
+  nextStreakAlertDate,
+  parseTime,
+  routeForNotificationData,
+  weeklyReviewTime,
+} from '@/services/notificationScheduling';
+import {
   GoalStatus,
   HabitFrequency,
-  type Goal,
   type Habit,
-  type HabitCompletion,
 } from '@/types/models';
 import * as Notifications from 'expo-notifications';
 import {
@@ -17,12 +27,13 @@ import {
   SchedulableTriggerInputTypes,
   type NotificationRequest,
 } from 'expo-notifications';
+import { router } from 'expo-router';
 import { Platform } from 'react-native';
 
 const CHANNEL_ID = 'kaarma-reminders';
-const MANAGED_NOTIFICATION_PREFIX = 'kaarma';
-const STREAK_ALERT_TIME = '20:30';
-const GOAL_NUDGE_TIME = '09:00';
+let notificationResponseSubscription: ReturnType<
+  typeof Notifications.addNotificationResponseReceivedListener
+> | null = null;
 
 function supportsLocalNotifications(): boolean {
   return Platform.OS === 'ios' || Platform.OS === 'android';
@@ -39,46 +50,6 @@ if (supportsLocalNotifications()) {
   });
 }
 
-function parseTime(time: string): { hour: number; minute: number } | null {
-  const match = time.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-
-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-
-  return { hour, minute };
-}
-
-function createDateWithTime(base: Date, time: string): Date {
-  const parsed = parseTime(time) ?? parseTime('09:00')!;
-
-  return new Date(
-    base.getFullYear(),
-    base.getMonth(),
-    base.getDate(),
-    parsed.hour,
-    parsed.minute,
-    0,
-    0,
-  );
-}
-
-function dateToKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
 function scheduleId(scope: string, entityId?: string, suffix?: string): string {
   return [MANAGED_NOTIFICATION_PREFIX, scope, entityId, suffix]
     .filter(Boolean)
@@ -86,73 +57,7 @@ function scheduleId(scope: string, entityId?: string, suffix?: string): string {
 }
 
 function isManagedNotification(request: NotificationRequest): boolean {
-  if (request.identifier.startsWith(MANAGED_NOTIFICATION_PREFIX)) {
-    return true;
-  }
-
-  return request.content.data?.scope === 'kaarma';
-}
-
-function hasCompletedToday(completions: HabitCompletion[], now: Date): boolean {
-  const todayKey = dateToKey(now);
-  return completions.some((completion) => completion.completedDate === todayKey);
-}
-
-function nextStreakAlertDate(
-  completions: HabitCompletion[],
-  now: Date,
-): Date {
-  const completedToday = hasCompletedToday(completions, now);
-  const todayAlert = createDateWithTime(now, STREAK_ALERT_TIME);
-
-  if (!completedToday && todayAlert.getTime() > now.getTime()) {
-    return todayAlert;
-  }
-
-  return createDateWithTime(addDays(now, 1), STREAK_ALERT_TIME);
-}
-
-function goalNudgeCandidates(goal: Goal): Array<{
-  idSuffix: string;
-  body: string;
-  triggerDate: Date;
-}> {
-  if (!goal.targetDate || goal.status !== GoalStatus.ACTIVE) {
-    return [];
-  }
-
-  const targetDate = new Date(goal.targetDate);
-  if (Number.isNaN(targetDate.getTime())) {
-    return [];
-  }
-
-  const dueDate = new Date(
-    targetDate.getFullYear(),
-    targetDate.getMonth(),
-    targetDate.getDate(),
-    0,
-    0,
-    0,
-    0,
-  );
-
-  return [
-    {
-      idSuffix: 'week',
-      body: `${goal.title} is due in one week.`,
-      triggerDate: createDateWithTime(addDays(dueDate, -7), GOAL_NUDGE_TIME),
-    },
-    {
-      idSuffix: 'day',
-      body: `${goal.title} is due tomorrow.`,
-      triggerDate: createDateWithTime(addDays(dueDate, -1), GOAL_NUDGE_TIME),
-    },
-    {
-      idSuffix: 'today',
-      body: `${goal.title} is due today. Make space for one more push.`,
-      triggerDate: createDateWithTime(dueDate, GOAL_NUDGE_TIME),
-    },
-  ];
+  return isManagedNotificationRecord(request);
 }
 
 function dailyTrigger(time: string): Notifications.DailyTriggerInput {
@@ -170,7 +75,7 @@ function weeklyTrigger(
   weekday: number,
   time: string,
 ): Notifications.WeeklyTriggerInput {
-  const parsed = parseTime(time) ?? parseTime('18:30')!;
+  const parsed = weeklyReviewTime(time);
 
   return {
     type: SchedulableTriggerInputTypes.WEEKLY,
@@ -219,6 +124,20 @@ async function scheduleNotificationAsync(
   });
 }
 
+async function scheduleNotificationBestEffortAsync(
+  identifier: string,
+  content: Notifications.NotificationContentInput,
+  trigger: Notifications.NotificationTriggerInput,
+): Promise<boolean> {
+  try {
+    await scheduleNotificationAsync(identifier, content, trigger);
+    return true;
+  } catch (error) {
+    console.warn(`Failed to schedule notification "${identifier}"`, error);
+    return false;
+  }
+}
+
 export async function initializeNotificationsAsync(): Promise<void> {
   if (!supportsLocalNotifications()) return;
 
@@ -229,6 +148,18 @@ export async function initializeNotificationsAsync(): Promise<void> {
       sound: 'default',
       vibrationPattern: [0, 250, 250, 250],
       showBadge: true,
+    });
+  }
+
+  if (!notificationResponseSubscription) {
+    notificationResponseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const route = routeForNotificationData(
+        response.notification.request.content.data as Record<string, unknown> | null | undefined,
+      );
+
+      if (route) {
+        router.push(route as any);
+      }
     });
   }
 }
@@ -269,11 +200,20 @@ export async function cancelManagedNotificationsAsync(): Promise<void> {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   const managed = scheduled.filter(isManagedNotification);
 
-  await Promise.all(
-    managed.map((request) =>
-      Notifications.cancelScheduledNotificationAsync(request.identifier),
-    ),
+  const results = await Promise.allSettled(
+    managed.map((request) => (
+      Notifications.cancelScheduledNotificationAsync(request.identifier)
+    )),
   );
+
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.warn(
+        `Failed to cancel notification "${managed[index].identifier}"`,
+        result.reason,
+      );
+    }
+  });
 }
 
 export async function syncManagedNotificationsAsync(): Promise<number> {
@@ -302,11 +242,10 @@ export async function syncManagedNotificationsAsync(): Promise<number> {
   ]);
 
   if (settings.habitRemindersEnabled) {
-    await Promise.all(
-      habits
-        .filter((habit) => !habit.isArchived && Boolean(habit.reminderTime))
-        .map(async (habit) => {
-          await scheduleNotificationAsync(
+    const scheduled = await Promise.all(
+      habitReminderCandidates(habits)
+        .map(async ({ habit, reminderTime }) => {
+          return scheduleNotificationBestEffortAsync(
             scheduleId('habit-reminder', habit.id),
             {
               title: 'Habit reminder',
@@ -316,52 +255,57 @@ export async function syncManagedNotificationsAsync(): Promise<number> {
                 habitId: habit.id,
               },
             },
-            dailyTrigger(habit.reminderTime!),
+            dailyTrigger(reminderTime),
           );
-          scheduledCount += 1;
         }),
     );
+    scheduledCount += scheduled.filter(Boolean).length;
   }
 
   if (settings.streakAlertsEnabled) {
-    await Promise.all(
+    const scheduled = await Promise.all(
       habits
         .filter(
           (habit) =>
             !habit.isArchived && habit.frequency === HabitFrequency.DAILY,
         )
         .map(async (habit: Habit) => {
-          const completions = await habitRepository.getCompletionsForHabit(
-            habit.id,
-          );
-          await scheduleNotificationAsync(
-            scheduleId('streak-alert', habit.id),
-            {
-              title: 'Streak check-in',
-              body: `${habit.name} still needs today's checkmark.`,
-              data: {
-                type: 'streak-alert',
-                habitId: habit.id,
+          try {
+            const completions = await habitRepository.getCompletionsForHabit(
+              habit.id,
+            );
+            return scheduleNotificationBestEffortAsync(
+              scheduleId('streak-alert', habit.id),
+              {
+                title: 'Streak check-in',
+                body: `${habit.name} still needs today's checkmark.`,
+                data: {
+                  type: 'streak-alert',
+                  habitId: habit.id,
+                },
               },
-            },
-            dateTrigger(nextStreakAlertDate(completions, now)),
-          );
-          scheduledCount += 1;
+              dateTrigger(nextStreakAlertDate(completions, now)),
+            );
+          } catch (error) {
+            console.warn(`Failed to prepare streak alert for habit "${habit.id}"`, error);
+            return false;
+          }
         }),
     );
+    scheduledCount += scheduled.filter(Boolean).length;
   }
 
   if (settings.goalDeadlineEnabled) {
-    await Promise.all(
+    const scheduled = await Promise.all(
       goals
         .filter((goal) => goal.status === GoalStatus.ACTIVE)
         .flatMap((goal) =>
           goalNudgeCandidates(goal).map(async (candidate) => {
             if (candidate.triggerDate.getTime() <= now.getTime()) {
-              return;
+              return false;
             }
 
-            await scheduleNotificationAsync(
+            return scheduleNotificationBestEffortAsync(
               scheduleId('goal-deadline', goal.id, candidate.idSuffix),
               {
                 title: 'Goal deadline',
@@ -373,14 +317,14 @@ export async function syncManagedNotificationsAsync(): Promise<number> {
               },
               dateTrigger(candidate.triggerDate),
             );
-            scheduledCount += 1;
           }),
         ),
     );
+    scheduledCount += scheduled.filter(Boolean).length;
   }
 
   if (settings.weeklyReviewEnabled) {
-    await scheduleNotificationAsync(
+    const scheduled = await scheduleNotificationBestEffortAsync(
       scheduleId('weekly-review'),
       {
         title: 'Weekly review',
@@ -389,9 +333,9 @@ export async function syncManagedNotificationsAsync(): Promise<number> {
           type: 'weekly-review',
         },
       },
-      weeklyTrigger(1, settings.weeklyReviewTime),
+      weeklyTrigger(WEEKLY_REVIEW_WEEKDAY, settings.weeklyReviewTime),
     );
-    scheduledCount += 1;
+    if (scheduled) scheduledCount += 1;
   }
 
   return scheduledCount;

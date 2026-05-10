@@ -2,6 +2,7 @@ import { storage } from '@/storage/asyncStorage';
 import type { ActivityLog } from '@/types/models';
 import { generateUUID } from '@/stores/baseStore';
 import type { ActivityRepository } from '@/repositories/interfaces/activityRepository';
+import { normalizeActivities } from '@/repositories/activityNormalization';
 import {
   ActivityEditWindowExpiredError,
   canEditActivityLog,
@@ -9,13 +10,28 @@ import {
 
 const ACTIVITY_KEY = 'kaarma_activity_logs';
 
+function requireValidActivity(entry: ActivityLog, message: string): ActivityLog {
+  const [normalizedEntry] = normalizeActivities([entry]);
+  if (!normalizedEntry) {
+    throw new Error(message);
+  }
+  return normalizedEntry;
+}
+
+function requireActivityId(id: string): string {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new Error('Activity id must be a non-empty string.');
+  }
+  return id.trim();
+}
+
 export async function clearActivityLocalCache(): Promise<void> {
   await storage.removeItem(ACTIVITY_KEY);
 }
 
 export const activityLocalRepository: ActivityRepository = {
   async getAllActivities() {
-    const entries = (await storage.getItem<ActivityLog[]>(ACTIVITY_KEY)) ?? [];
+    const entries = normalizeActivities(await storage.getItem<unknown>(ACTIVITY_KEY, []));
     return entries.sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
   },
 
@@ -25,7 +41,7 @@ export const activityLocalRepository: ActivityRepository = {
   },
 
   async saveActivities(entries) {
-    await storage.setItem(ACTIVITY_KEY, entries);
+    await storage.setItem(ACTIVITY_KEY, normalizeActivities(entries));
   },
 
   async addActivity(data) {
@@ -35,8 +51,9 @@ export const activityLocalRepository: ActivityRepository = {
       id: generateUUID(),
       loggedAt: new Date().toISOString(),
     };
-    await this.saveActivities([...entries, entry]);
-    return entry;
+    const normalizedEntry = requireValidActivity(entry, 'Activity data must be valid before saving.');
+    await this.saveActivities([...entries, normalizedEntry]);
+    return normalizedEntry;
   },
 
   async updateActivity(id, updates) {
@@ -46,14 +63,18 @@ export const activityLocalRepository: ActivityRepository = {
     if (!canEditActivityLog(entries[idx].loggedAt)) {
       throw new ActivityEditWindowExpiredError();
     }
-    entries[idx] = { ...entries[idx], ...updates };
+    entries[idx] = requireValidActivity(
+      { ...entries[idx], ...updates },
+      'Activity update would create invalid activity data.',
+    );
     await this.saveActivities(entries);
     return entries[idx];
   },
 
   async deleteActivity(id) {
+    const normalizedId = requireActivityId(id);
     const entries = await this.getAllActivities();
-    await this.saveActivities(entries.filter((e) => e.id !== id));
+    await this.saveActivities(entries.filter((e) => e.id !== normalizedId));
   },
 
   async getWeeklySummary() {

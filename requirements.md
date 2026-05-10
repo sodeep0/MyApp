@@ -1,6 +1,6 @@
 # Kaarma - Product Requirements
 
-> Last updated: 2026-04-25
+> Last updated: 2026-04-26
 > Scope: realistic product requirements for the current codebase and near-term MVP
 
 For verified implementation status, use `progress.md`. This file defines product expectations and intended near-term scope.
@@ -36,7 +36,7 @@ The project is currently a working prototype with real persistence and partial h
 - production-grade encryption lifecycle tooling (for example key rotation/export-safe workflows)
 - production-grade notification delivery, deep links, or advanced notification controls
 - mature sync conflict handling
-- fully functional app blocking/scheduling
+- fully functional native app blocking/scheduling
 - release-ready testing, export, deletion, and privacy tooling
 
 ## 3. Product Principles
@@ -106,8 +106,9 @@ Current expectation:
 - sign-in and create-account screens support both email/password and Google auth
 - auth is reachable both from the guest profile screen and from the onboarding skip action
 - profile editing exists
+- guest profile exposes privacy/security, data export, and local-device reset controls for local-first data management
 - profile now includes a dedicated notifications settings screen for reminder toggles and weekly review time
-- auth state still mixes Firebase session behavior with local flags and needs cleanup
+- auth state follows Firebase session behavior in the main profile/auth flows, with broader session centralization still pending
 
 ### 6.3 Habits
 
@@ -124,7 +125,7 @@ Current expectation:
 - streak, best-streak, and at-risk logic exist
 - local reminder scheduling now exists through `expo-notifications`
 - daily-habit streak-risk alerts are now scheduled locally in the evening
-- free-tier history rules are not enforced yet
+- free-tier history rules restrict older detail-calendar history for free users, with broader centralization still pending
 
 ### 6.4 Goals
 
@@ -140,7 +141,8 @@ Current expectation:
 - progress updates are stored
 - goals are standalone and are not linked to habits in the current UI flow
 - active goals with target dates now schedule local deadline nudges
-- free-tier caps and premium extras are not enforced yet
+- free-tier active-goal caps are enforced in the create flow and domain layer
+- premium extras beyond current caps are still not backed by production billing
 
 ### 6.5 Journal
 
@@ -188,7 +190,7 @@ Current expectation:
 
 - activity logging is functional
 - summaries and frequent-name shortcuts are present
-- time-window editing rules are not enforced yet
+- 48-hour edit-window rules are enforced in the form and repository layer
 
 ### 6.8 Screen Time
 
@@ -205,7 +207,8 @@ Current expectation:
 - Android usage stats service exists
 - unsupported environments can still render a demo/fallback UI
 - app-limits management now exists with per-app set/clear daily limits persisted in `screenTimeService`
-- scheduling and real blocking are still not finished
+- focus sessions now persist locally with selected duration, remaining-time recovery after reload, manual ending, automatic expiry cleanup, and persisted blocked-app selections
+- scheduling and native app blocking are still not finished
 
 ### 6.9 Premium
 
@@ -218,7 +221,7 @@ Expected behavior:
 Current expectation:
 
 - upsell and mock subscription state exist
-- actual gate enforcement is still limited
+- core free-tier and premium gates use shared helper logic, but billing and deeper enforcement are still incomplete
 - production billing is not integrated
 
 ## 7. Design System Expectations
@@ -252,7 +255,7 @@ Rules:
 
 - Firebase is a supporting backend for eligible modules
 - the app must still behave sensibly in local-only mode
-- sync is best-effort and still needs stronger runtime validation
+- sync is best-effort; runtime queue validation now rejects local-only modules, but broader conflict handling is still immature
 
 ## 9. Security and Privacy Expectations
 
@@ -264,7 +267,9 @@ Required:
 
 Not yet complete:
 
-- robust export/delete/privacy tooling
+- robust account/cloud delete privacy tooling
+- export is currently a Profile JSON share flow available from guest and signed-in profile modes; it includes warnings for partial habit-completion export failures but is not a full file-management or PDF workflow
+- profile includes local-device data reset in guest and signed-in modes, plus signed-in Firebase account/cloud deletion for cloud-eligible modules; recent-login recovery routes users back to sign-in, and native QA is still pending
 - hardened key lifecycle strategy (rotation/recovery policies)
 
 Current implementation note:
@@ -289,18 +294,18 @@ The near-term MVP does not require:
 - complete premium billing
 - social features
 - iOS app blocking
-- export/PDF tooling
+- advanced export/PDF tooling
 - advanced sync conflict resolution
 
 ## 11. Release Blockers
 
 The project should not be considered release-ready until these are addressed:
 
-- premium and free-tier rules are enforced
+- remaining premium and free-tier rules are enforced beyond the current core gates
 - sensitive local data has a real encryption strategy
 - notification behavior is QA'd on target native builds and intentionally scoped
 - lint warnings are cleaned up
-- test coverage exists for core domain logic
+- focused test coverage exists for core storage/domain rules, with broader app-flow coverage added
 - runtime QA is completed for online/offline/auth/sync flows
 - EAS and production build configuration are finalized
 - misleading product or security claims have been removed from docs and UI copy

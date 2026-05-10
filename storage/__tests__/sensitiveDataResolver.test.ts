@@ -38,6 +38,27 @@ test('resolveSensitiveRead falls back to legacy and requests migration when encr
   assert.deepEqual(result.value, ['legacy']);
 });
 
+test('resolveSensitiveRead marks malformed encrypted envelopes as corrupted', async () => {
+  const result = await resolveSensitiveRead({
+    encrypted: {
+      version: 2,
+      ciphertext: '',
+      ivHex: '00112233445566778899aabbccddeeff',
+      encryptedAt: '2026-04-21T00:00:00.000Z',
+    },
+    legacy: ['legacy'],
+    defaultValue: [],
+    decryptEncrypted: async () => {
+      throw new Error('decrypt should not run for malformed envelopes');
+    },
+  });
+
+  assert.equal(result.source, 'legacy');
+  assert.equal(result.shouldMigrateLegacy, true);
+  assert.equal(result.isCorrupted, true);
+  assert.deepEqual(result.value, ['legacy']);
+});
+
 test('resolveSensitiveRead falls back to default when both encrypted and legacy are unavailable', async () => {
   const result = await resolveSensitiveRead({
     encrypted: envelope,

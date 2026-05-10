@@ -11,9 +11,10 @@ import {
 } from 'firebase/firestore';
 import type { Goal } from '@/types/models';
 import { GoalStatus } from '@/types/models';
+import { normalizeGoals } from '@/repositories/goalNormalization';
 import type { GoalRepository } from '@/repositories/interfaces/goalRepository';
 import { goalLocalRepository } from '@/repositories/local/goalRepository.local';
-import { enqueueSyncItem, flushSyncQueue } from '@/services/sync/syncQueue';
+import { enqueueSyncItem, flushSyncQueue, PermanentSyncItemError } from '@/services/sync/syncQueue';
 import { getCloudContext, stripUndefined } from './common';
 
 function goalsPath(uid: string): string {
@@ -31,19 +32,44 @@ async function deleteGoalInCloud(uid: string, db: Firestore, id: string): Promis
   await deleteDoc(doc(db, `${goalsPath(uid)}/${id}`));
 }
 
+function requireQueuedGoal(payload: unknown): Goal {
+  const [goal] = normalizeGoals([payload]);
+  if (!goal) {
+    throw new PermanentSyncItemError('queued goal payload is invalid');
+  }
+  return goal;
+}
+
+function requireQueuedId(payload: unknown, label: string): string {
+  if (typeof payload !== 'string' || payload.trim().length === 0) {
+    throw new PermanentSyncItemError(`queued ${label} id is invalid`);
+  }
+  return payload.trim();
+}
+
+function requireRepositoryId(id: string, label: string): string {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new Error(`${label} id must be a non-empty string.`);
+  }
+  return id.trim();
+}
+
 export async function flushGoalQueue(): Promise<void> {
   await flushSyncQueue('goals', async (item) => {
     const context = await getCloudContext();
     if (!context) throw new Error('cloud context unavailable');
 
     if (item.action === 'setGoal') {
-      await setGoalInCloud(context.uid, context.db, item.payload as Goal);
+      await setGoalInCloud(context.uid, context.db, requireQueuedGoal(item.payload));
       return;
     }
 
     if (item.action === 'deleteGoal') {
-      await deleteGoalInCloud(context.uid, context.db, item.payload as string);
+      await deleteGoalInCloud(context.uid, context.db, requireQueuedId(item.payload, 'goal'));
+      return;
     }
+
+    throw new PermanentSyncItemError(`unsupported goals sync action "${item.action}"`);
   });
 }
 
@@ -55,7 +81,7 @@ export const goalFirebaseRepository: GoalRepository = {
     await flushGoalQueue();
     const q = query(collection(context.db, goalsPath(context.uid)), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
-    const goals = snap.docs.map((d) => d.data() as Goal);
+    const goals = normalizeGoals(snap.docs.map((d) => d.data()));
     await goalLocalRepository.saveGoals(goals);
     return goals;
   },
@@ -66,16 +92,17 @@ export const goalFirebaseRepository: GoalRepository = {
   },
 
   async saveGoals(goals) {
-    await goalLocalRepository.saveGoals(goals);
+    const normalizedGoals = normalizeGoals(goals);
+    await goalLocalRepository.saveGoals(normalizedGoals);
     const context = await getCloudContext();
     if (!context) {
-      for (const goal of goals) {
+      for (const goal of normalizedGoals) {
         await enqueueSyncItem('goals', 'setGoal', goal);
       }
       return;
     }
 
-    for (const goal of goals) {
+    for (const goal of normalizedGoals) {
       try {
         await setGoalInCloud(context.uid, context.db, goal);
       } catch {
@@ -121,18 +148,19 @@ export const goalFirebaseRepository: GoalRepository = {
   },
 
   async deleteGoal(id) {
-    await goalLocalRepository.deleteGoal(id);
+    const normalizedId = requireRepositoryId(id, 'Goal');
+    await goalLocalRepository.deleteGoal(normalizedId);
     const context = await getCloudContext();
     if (!context) {
-      await enqueueSyncItem('goals', 'deleteGoal', id);
+      await enqueueSyncItem('goals', 'deleteGoal', normalizedId);
       return;
     }
 
     try {
-      await deleteGoalInCloud(context.uid, context.db, id);
+      await deleteGoalInCloud(context.uid, context.db, normalizedId);
       await flushGoalQueue();
     } catch {
-      await enqueueSyncItem('goals', 'deleteGoal', id);
+      await enqueueSyncItem('goals', 'deleteGoal', normalizedId);
     }
   },
 

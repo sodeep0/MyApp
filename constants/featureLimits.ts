@@ -40,10 +40,10 @@ const PREMIUM_FEATURES = {
     featureName: 'focus sessions',
   },
   appBlocking: {
-    featureName: 'hard app blocking',
+    featureName: 'blocked-app planning',
   },
   focusAndBlocking: {
-    featureName: 'focus sessions and hard app blocking',
+    featureName: 'focus sessions and blocked-app planning',
   },
 } as const satisfies Record<string, PremiumFeatureConfig>;
 
@@ -65,11 +65,22 @@ export type PremiumFeatureGate = {
   featureName: string;
 };
 
-export function getHabitHistoryCutoffDate(): Date {
-  const cutoff = new Date();
+export function getHabitHistoryCutoffDate(now: Date = new Date()): Date {
+  const cutoff = new Date(now);
   cutoff.setHours(0, 0, 0, 0);
   cutoff.setDate(cutoff.getDate() - (FREE_TIER_LIMITS.HABIT_HISTORY_DAYS - 1));
   return cutoff;
+}
+
+export function filterHabitHistoryCompletions<T extends { completedDate: string }>(
+  completions: T[],
+  isPremium: boolean,
+  now: Date = new Date(),
+): T[] {
+  if (isPremium === true) return completions;
+
+  const cutoff = formatDateOnly(getHabitHistoryCutoffDate(now));
+  return completions.filter((completion) => completion.completedDate >= cutoff);
 }
 
 export function formatDateOnly(date: Date): string {
@@ -89,14 +100,16 @@ export function getCountLimitedFeatureGate(
   count: number,
 ): CountLimitedFeatureGate {
   const config = COUNT_LIMITED_FEATURES[key];
-  const remaining = Math.max(0, config.limit - count);
+  const premium = isPremium === true;
+  const normalizedCount = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+  const remaining = Math.max(0, config.limit - normalizedCount);
 
   return {
     key,
     limit: config.limit,
-    count,
+    count: normalizedCount,
     remaining,
-    locked: !isPremium && count >= config.limit,
+    locked: !premium && normalizedCount >= config.limit,
     featureName: config.featureName,
   };
 }
@@ -107,10 +120,12 @@ export function getPremiumFeatureGate(
   isRelevant: boolean = true,
 ): PremiumFeatureGate {
   const config = PREMIUM_FEATURES[key];
+  const premium = isPremium === true;
+  const relevant = isRelevant !== false;
 
   return {
     key,
-    locked: !isPremium && isRelevant,
+    locked: !premium && relevant,
     featureName: config.featureName,
   };
 }

@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  FlatList,
   ScrollView,
   Pressable,
   InteractionManager,
@@ -341,10 +342,27 @@ export default function HabitListScreen() {
         </View>
       </View>
 
-      <ScrollView
+      <FlatList
+        data={totalCount === 0 ? [] : filteredHabits}
+        keyExtractor={(habit) => habit.id}
+        renderItem={({ item: habit }) => (
+          <HabitCard
+            habit={habit}
+            weekData={weekDataMap[habit.id] || { dots: [false,false,false,false,false,false,false], completionPct: 0, bestStreak: 0, streak: 0, completedToday: false, atRisk: false }}
+            onPress={() => router.push(`/(tabs)/habits/detail?id=${habit.id}` as any)}
+            onToggle={() => handleToggle(habit.id)}
+            disabled={Boolean(pendingToggleIds[habit.id])}
+          />
+        )}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-      >
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={7}
+        removeClippedSubviews
+        ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
+        ListHeaderComponent={(
+          <>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -390,28 +408,17 @@ export default function HabitListScreen() {
               />
             </View>
           </View>
-        ) : (
-          <View style={styles.habitList}>
-            {filteredHabits.map((habit) => (
-              <HabitCard
-                key={habit.id}
-                habit={habit}
-                weekData={weekDataMap[habit.id] || { dots: [false,false,false,false,false,false,false], completionPct: 0, bestStreak: 0, streak: 0, completedToday: false, atRisk: false }}
-                onPress={() => router.push(`/(tabs)/habits/detail?id=${habit.id}` as any)}
-                onToggle={() => handleToggle(habit.id)}
-                disabled={Boolean(pendingToggleIds[habit.id])}
-              />
-            ))}
-            {filteredHabits.length === 0 && (
-              <View style={styles.emptyFilterState}>
-                <Ionicons name="filter-outline" size={40} color={Colors.DustyTaupe} />
-                <Text style={styles.emptyFilterText}>No habits match this filter</Text>
-              </View>
-            )}
-          </View>
+        ) : null}
+          </>
         )}
-        <View style={{ height: 120 }} />
-      </ScrollView>
+        ListEmptyComponent={totalCount > 0 ? (
+          <View style={styles.emptyFilterState}>
+            <Ionicons name="filter-outline" size={40} color={Colors.DustyTaupe} />
+            <Text style={styles.emptyFilterText}>No habits match this filter</Text>
+          </View>
+        ) : null}
+        ListFooterComponent={<View style={{ height: 120 }} />}
+      />
 
       <Pressable
         onPress={() => router.push('/(tabs)/habits/add-edit' as any)}
@@ -509,8 +516,8 @@ const styles = StyleSheet.create({
     ...Typography.Body1,
     color: Colors.TextSecondary,
   },
-  habitList: {
-    gap: Spacing.md,
+  listSeparator: {
+    height: Spacing.md,
   },
   habitCard: {
     backgroundColor: Colors.Surface,

@@ -3,7 +3,22 @@
 // Uses conditional require to avoid bundling the native module on non-Android platforms.
 
 import { Platform } from 'react-native';
-import { storage } from '../storage/asyncStorage';
+import { getAppLimits } from '@/services/screenTimeState';
+export {
+  formatMs,
+  getActiveFocusSession,
+  getAppLimit,
+  getAppLimits,
+  getBlockedApps,
+  getLimitPercent,
+  isLimitReached,
+  resetScreenTimeData,
+  setAppLimit,
+  setBlockedApp,
+  startFocusSession,
+  endFocusSession,
+  type FocusSession,
+} from '@/services/screenTimeState';
 
 type UsageStats = {
   packageName: string;
@@ -60,8 +75,6 @@ async function getNativeModule(): Promise<NativeModule | null> {
   return _nativeModule;
 }
 
-const APP_LIMITS_KEY = 'kaarma_screen_time_app_limits';
-
 export interface AppUsage {
   packageName: string;
   appName: string;
@@ -87,14 +100,6 @@ type AppCatalog = {
 };
 
 type AggregateMode = 'sum' | 'max';
-
-/** Format milliseconds to "Xh Ym" */
-export function formatMs(ms: number): string {
-  const totalMin = Math.round(ms / 60000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
 
 function dayStartTs(dayOffset: number = 0): number {
   const d = new Date();
@@ -158,6 +163,25 @@ function shouldIncludePackage(
   return launchablePackages.has(packageName);
 }
 
+function normalizeUsageStat(stat: UsageStats): UsageStats | null {
+  if (!stat || typeof stat.packageName !== 'string') return null;
+
+  const packageName = stat.packageName.trim();
+  if (
+    packageName.length === 0
+    || !Number.isFinite(stat.totalTimeInForeground)
+    || stat.totalTimeInForeground <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    packageName,
+    totalTimeInForeground: stat.totalTimeInForeground,
+    lastTimeStamp: Number.isFinite(stat.lastTimeStamp) ? stat.lastTimeStamp : 0,
+  };
+}
+
 function aggregateUsageStats(
   stats: UsageStats[],
   launchablePackages: Set<string>,
@@ -165,8 +189,9 @@ function aggregateUsageStats(
 ): UsageStats[] {
   const byPackage = new Map<string, UsageStats>();
 
-  for (const stat of stats) {
-    if (!stat || stat.totalTimeInForeground <= 0) continue;
+  for (const rawStat of stats) {
+    const stat = normalizeUsageStat(rawStat);
+    if (!stat) continue;
     if (!shouldIncludePackage(stat.packageName, launchablePackages)) continue;
 
     const existing = byPackage.get(stat.packageName);
@@ -230,7 +255,7 @@ export async function getScreenTimeReport(
     const aggregateMode: AggregateMode = period === 'today' ? 'max' : 'sum';
     const aggregated = aggregateUsageStats(rawStats, launchablePackages, aggregateMode);
 
-    const limits = await storage.getItem<Record<string, number>>(APP_LIMITS_KEY, {});
+    const limits = await getAppLimits();
 
     const totalMs = aggregated.reduce(
       (sum: number, stat: UsageStats) => sum + stat.totalTimeInForeground,
@@ -307,29 +332,4 @@ async function getHourBreakdown(startTime: number, endTime: number): Promise<num
   }
 
   return hours;
-}
-
-export async function getAppLimit(packageName: string): Promise<number | undefined> {
-  const limits = await storage.getItem<Record<string, number>>(APP_LIMITS_KEY, {});
-  return limits?.[packageName];
-}
-
-export async function setAppLimit(packageName: string, limitMs: number | null): Promise<void> {
-  const limits = await storage.getItem<Record<string, number>>(APP_LIMITS_KEY, {}) || {};
-  if (limitMs === null || limitMs <= 0) {
-    delete limits[packageName];
-  } else {
-    limits[packageName] = limitMs;
-  }
-  await storage.setItem(APP_LIMITS_KEY, limits);
-}
-
-export function isLimitReached(usageMs: number, limitMs?: number): boolean {
-  if (!limitMs || limitMs <= 0) return false;
-  return usageMs >= limitMs;
-}
-
-export function getLimitPercent(usageMs: number, limitMs?: number): number {
-  if (!limitMs || limitMs <= 0) return 0;
-  return Math.min(usageMs / limitMs, 1);
 }

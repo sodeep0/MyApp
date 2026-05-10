@@ -1,8 +1,15 @@
 // Bad habit & urge event store (local-only by policy; never sync to Firebase)
 import type { BadHabit, UrgeEvent } from '../types/models';
+import { normalizeBadHabits, normalizeUrgeEvents } from './badHabitEntryNormalization';
 import { generateUUID } from './baseStore';
 import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
 import { getSensitiveItem, setSensitiveItem } from '@/storage/secureDataStorage';
+export {
+  bestStreakDays,
+  currentStreakDays,
+  daysSinceQuit,
+  totalCleanDays,
+} from '@/stores/badHabitMetrics';
 
 const BAD_HABITS_KEY = 'kaarma_bad_habits';
 const URGE_EVENTS_KEY = 'kaarma_urge_events';
@@ -12,11 +19,12 @@ const URGE_EVENTS_SECURE_KEY = 'kaarma_secure_urge_events_v1';
 // ─── Bad Habits ──────────────────────────────────────────────────────────────
 
 export async function getAllBadHabits(): Promise<BadHabit[]> {
-  return getSensitiveItem<BadHabit[]>({
+  const habits = await getSensitiveItem<unknown>({
     secureKey: BAD_HABITS_SECURE_KEY,
     legacyKey: BAD_HABITS_KEY,
     defaultValue: [],
   });
+  return normalizeBadHabits(habits);
 }
 
 export async function getBadHabitById(id: string): Promise<BadHabit | undefined> {
@@ -28,7 +36,7 @@ export async function saveBadHabits(habits: BadHabit[]): Promise<void> {
   await setSensitiveItem({
     secureKey: BAD_HABITS_SECURE_KEY,
     legacyKey: BAD_HABITS_KEY,
-    value: habits,
+    value: normalizeBadHabits(habits),
   });
 }
 
@@ -71,27 +79,24 @@ export function countActiveBadHabits(): Promise<number> {
 // ─── Urge Events ─────────────────────────────────────────────────────────────
 
 export async function getUrgeEventsForHabit(badHabitId: string): Promise<UrgeEvent[]> {
-  const all = await getSensitiveItem<UrgeEvent[]>({
-    secureKey: URGE_EVENTS_SECURE_KEY,
-    legacyKey: URGE_EVENTS_KEY,
-    defaultValue: [],
-  });
+  const all = await getAllUrgeEvents();
   return all.filter((e) => e.badHabitId === badHabitId);
 }
 
 export async function getAllUrgeEvents(): Promise<UrgeEvent[]> {
-  return getSensitiveItem<UrgeEvent[]>({
+  const events = await getSensitiveItem<unknown>({
     secureKey: URGE_EVENTS_SECURE_KEY,
     legacyKey: URGE_EVENTS_KEY,
     defaultValue: [],
   });
+  return normalizeUrgeEvents(events);
 }
 
 export async function saveUrgeEvents(events: UrgeEvent[]): Promise<void> {
   await setSensitiveItem({
     secureKey: URGE_EVENTS_SECURE_KEY,
     legacyKey: URGE_EVENTS_KEY,
-    value: events,
+    value: normalizeUrgeEvents(events),
   });
 }
 
@@ -100,68 +105,4 @@ export async function logUrgeEvent(data: Omit<UrgeEvent, 'id' | 'loggedAt'>): Pr
   const event: UrgeEvent = { ...data, id: generateUUID(), loggedAt: new Date().toISOString() };
   await saveUrgeEvents([...all, event]);
   return event;
-}
-
-export function daysSinceQuit(quitDateStr: string): number {
-  const quitDate = new Date(quitDateStr);
-  const now = new Date();
-  const quitDay = new Date(quitDate.getFullYear(), quitDate.getMonth(), quitDate.getDate());
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.floor((today.getTime() - quitDay.getTime()) / 86400000);
-}
-
-export function currentStreakDays(quitDateStr: string, urgeEvents: UrgeEvent[]): number {
-  const resetDates = urgeEvents
-    .filter((e) => e.type === 'RELAPSE' && e.resetCounter)
-    .map((e) => {
-      const d = new Date(e.loggedAt);
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    })
-    .sort((a, b) => a - b);
-
-  if (resetDates.length === 0) return daysSinceQuit(quitDateStr);
-
-  const lastReset = resetDates[resetDates.length - 1];
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.floor((today.getTime() - lastReset) / 86400000);
-}
-
-export function bestStreakDays(quitDateStr: string, urgeEvents: UrgeEvent[]): number {
-  const resetDates = urgeEvents
-    .filter((e) => e.type === 'RELAPSE' && e.resetCounter)
-    .map((e) => {
-      const d = new Date(e.loggedAt);
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    })
-    .sort((a, b) => a.getTime() - b.getTime());
-
-  const quitDate = new Date(quitDateStr);
-  const quitDay = new Date(quitDate.getFullYear(), quitDate.getMonth(), quitDate.getDate());
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  if (resetDates.length === 0) {
-    return Math.floor((today.getTime() - quitDay.getTime()) / 86400000);
-  }
-
-  let best = 0;
-  let start = new Date(quitDay);
-
-  for (const reset of resetDates) {
-    const diff = Math.floor((reset.getTime() - start.getTime()) / 86400000);
-    if (diff > best) best = diff;
-    start = reset;
-  }
-
-  const finalDiff = Math.floor((today.getTime() - start.getTime()) / 86400000);
-  if (finalDiff > best) best = finalDiff;
-
-  return best;
-}
-
-export function totalCleanDays(quitDateStr: string, urgeEvents: UrgeEvent[]): number {
-  const totalDays = daysSinceQuit(quitDateStr);
-  const relapseDays = urgeEvents.filter((e) => e.type === 'RELAPSE' && e.resetCounter).length;
-  return Math.max(0, totalDays - relapseDays);
 }

@@ -160,7 +160,7 @@ export default function PermissionsScreen() {
         <PermissionCard
           icon="phone-portrait-outline"
           title="Screen Time Access"
-          description="See which apps you use and for how long — and block them when your limit is reached."
+          description="See which apps you use and for how long, with local app limits and focus-session planning."
           onAllow={requestScreenTimePermission}
           onSkip={() => setStatsGranted(true)}
           granted={statsGranted}

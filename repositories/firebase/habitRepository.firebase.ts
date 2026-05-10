@@ -9,9 +9,10 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import type { Habit, HabitCompletion } from '@/types/models';
+import { normalizeHabitCompletions, normalizeHabits } from '@/repositories/habitNormalization';
 import type { HabitRepository } from '@/repositories/interfaces/habitRepository';
 import { habitLocalRepository } from '@/repositories/local/habitRepository.local';
-import { enqueueSyncItem, flushSyncQueue } from '@/services/sync/syncQueue';
+import { enqueueSyncItem, flushSyncQueue, PermanentSyncItemError } from '@/services/sync/syncQueue';
 import { getCloudContext, stripUndefined } from './common';
 
 function habitsPath(uid: string): string {
@@ -127,7 +128,7 @@ function refreshHabitsFromCloudInBackground(): void {
       await flushHabitQueue();
       const q = query(collection(context.db, habitsPath(context.uid)), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
-      const habits = snap.docs.map((d) => d.data() as Habit);
+      const habits = normalizeHabits(snap.docs.map((d) => d.data()));
       await habitLocalRepository.saveHabits(habits);
     } finally {
       isRefreshingHabits = false;
@@ -141,23 +142,26 @@ export async function flushHabitQueue(): Promise<void> {
     if (!context) throw new Error('cloud context unavailable');
 
     if (item.action === 'setHabit') {
-      await setHabitInCloud(context.uid, context.db, item.payload as Habit);
+      await setHabitInCloud(context.uid, context.db, requireQueuedHabit(item.payload));
       return;
     }
 
     if (item.action === 'deleteHabit') {
-      await deleteHabitInCloud(context.uid, context.db, item.payload as string);
+      await deleteHabitInCloud(context.uid, context.db, requireQueuedId(item.payload, 'habit'));
       return;
     }
 
     if (item.action === 'setCompletion') {
-      await setCompletionInCloud(context.uid, context.db, item.payload as HabitCompletion);
+      await setCompletionInCloud(context.uid, context.db, requireQueuedCompletion(item.payload));
       return;
     }
 
     if (item.action === 'removeTodayCompletion') {
-      await removeTodayCompletionInCloud(context.uid, context.db, item.payload as string);
+      await removeTodayCompletionInCloud(context.uid, context.db, requireQueuedId(item.payload, 'habit'));
+      return;
     }
+
+    throw new PermanentSyncItemError(`unsupported habits sync action "${item.action}"`);
   });
 }
 
@@ -176,6 +180,36 @@ async function syncCompletionToCloud(completion: HabitCompletion): Promise<void>
   }
 }
 
+function requireQueuedHabit(payload: unknown): Habit {
+  const [habit] = normalizeHabits([payload]);
+  if (!habit) {
+    throw new PermanentSyncItemError('queued habit payload is invalid');
+  }
+  return habit;
+}
+
+function requireQueuedCompletion(payload: unknown): HabitCompletion {
+  const [completion] = normalizeHabitCompletions([payload]);
+  if (!completion) {
+    throw new PermanentSyncItemError('queued habit completion payload is invalid');
+  }
+  return completion;
+}
+
+function requireQueuedId(payload: unknown, label: string): string {
+  if (typeof payload !== 'string' || payload.trim().length === 0) {
+    throw new PermanentSyncItemError(`queued ${label} id is invalid`);
+  }
+  return payload.trim();
+}
+
+function requireRepositoryId(id: string, label: string): string {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new Error(`${label} id must be a non-empty string.`);
+  }
+  return id.trim();
+}
+
 export const habitFirebaseRepository: HabitRepository = {
   async getAllHabits() {
     const localHabits = await habitLocalRepository.getAllHabits();
@@ -189,8 +223,9 @@ export const habitFirebaseRepository: HabitRepository = {
   },
 
   async saveHabits(habits) {
-    await habitLocalRepository.saveHabits(habits);
-    for (const habit of habits) {
+    const normalizedHabits = normalizeHabits(habits);
+    await habitLocalRepository.saveHabits(normalizedHabits);
+    for (const habit of normalizedHabits) {
       queueOrPushHabitInBackground(habit);
     }
   },
@@ -214,8 +249,9 @@ export const habitFirebaseRepository: HabitRepository = {
   },
 
   async deleteHabit(id) {
-    await habitLocalRepository.deleteHabit(id);
-    queueOrDeleteHabitInBackground(id);
+    const normalizedId = requireRepositoryId(id, 'Habit');
+    await habitLocalRepository.deleteHabit(normalizedId);
+    queueOrDeleteHabitInBackground(normalizedId);
   },
 
   async getCompletionsForHabit(habitId) {
@@ -227,8 +263,9 @@ export const habitFirebaseRepository: HabitRepository = {
   },
 
   async saveCompletions(completions) {
-    await habitLocalRepository.saveCompletions(completions);
-    for (const completion of completions) {
+    const normalizedCompletions = normalizeHabitCompletions(completions);
+    await habitLocalRepository.saveCompletions(normalizedCompletions);
+    for (const completion of normalizedCompletions) {
       queueOrPushCompletionInBackground(completion);
     }
   },
@@ -240,7 +277,8 @@ export const habitFirebaseRepository: HabitRepository = {
   },
 
   async unmarkHabitComplete(habitId) {
-    await habitLocalRepository.unmarkHabitComplete(habitId);
-    queueOrRemoveCompletionInBackground(habitId);
+    const normalizedId = requireRepositoryId(habitId, 'Habit');
+    await habitLocalRepository.unmarkHabitComplete(normalizedId);
+    queueOrRemoveCompletionInBackground(normalizedId);
   },
 };

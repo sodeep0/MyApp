@@ -6,6 +6,13 @@ const MAX_ATTEMPTS = 5;
 
 export type SyncModule = 'user' | 'habits' | 'goals' | 'activities';
 
+export class PermanentSyncItemError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermanentSyncItemError';
+  }
+}
+
 export interface SyncQueueItem {
   id: string;
   module: SyncModule;
@@ -16,8 +23,67 @@ export interface SyncQueueItem {
   lastError: string | null;
 }
 
+function isSyncModule(value: unknown): value is SyncModule {
+  return value === 'user' || value === 'habits' || value === 'goals' || value === 'activities';
+}
+
+function normalizeQueueItem(item: unknown): SyncQueueItem | null {
+  if (!item || typeof item !== 'object') return null;
+
+  const candidate = item as Partial<SyncQueueItem>;
+  if (typeof candidate.id !== 'string' || candidate.id.length === 0) return null;
+  if (!isSyncModule(candidate.module)) return null;
+  if (typeof candidate.action !== 'string' || candidate.action.trim().length === 0) return null;
+
+  return {
+    id: candidate.id,
+    module: candidate.module,
+    action: candidate.action.trim(),
+    payload: candidate.payload,
+    attempts:
+      typeof candidate.attempts === 'number' && Number.isFinite(candidate.attempts) && candidate.attempts >= 0
+        ? Math.floor(candidate.attempts)
+        : 0,
+    createdAt:
+      typeof candidate.createdAt === 'string' && candidate.createdAt.length > 0
+        ? candidate.createdAt
+        : new Date().toISOString(),
+    lastError:
+      typeof candidate.lastError === 'string'
+        ? candidate.lastError
+        : null,
+  };
+}
+
+function normalizeSyncAction(action: string): string {
+  const normalizedAction = action.trim();
+  if (normalizedAction.length === 0) {
+    throw new Error('Sync queue action must not be empty.');
+  }
+  return normalizedAction;
+}
+
+function normalizeSyncModule(module: SyncModule): SyncModule {
+  if (!isSyncModule(module)) {
+    throw new Error('Sync queue module must be cloud-eligible.');
+  }
+  return module;
+}
+
+function getSyncErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isPermanentSyncItemError(error: unknown): error is PermanentSyncItemError {
+  return error instanceof PermanentSyncItemError;
+}
+
 async function getQueue(): Promise<SyncQueueItem[]> {
-  return (await storage.getItem<SyncQueueItem[]>(SYNC_QUEUE_KEY)) ?? [];
+  const stored = await storage.getItem<unknown>(SYNC_QUEUE_KEY, null);
+  if (!Array.isArray(stored)) return [];
+  return stored
+    .map(normalizeQueueItem)
+    .filter((item): item is SyncQueueItem => item !== null);
 }
 
 async function saveQueue(items: SyncQueueItem[]): Promise<void> {
@@ -30,7 +96,7 @@ export async function clearSyncQueue(modules?: SyncModule[]): Promise<void> {
     return;
   }
 
-  const scopedModules = new Set(modules);
+  const scopedModules = new Set(modules.map(normalizeSyncModule));
   const queue = await getQueue();
   await saveQueue(queue.filter((item) => !scopedModules.has(item.module)));
 }
@@ -40,11 +106,13 @@ export async function enqueueSyncItem(
   action: string,
   payload: unknown,
 ): Promise<void> {
+  const normalizedModule = normalizeSyncModule(module);
+  const normalizedAction = normalizeSyncAction(action);
   const queue = await getQueue();
   queue.push({
     id: generateUUID(),
-    module,
-    action,
+    module: normalizedModule,
+    action: normalizedAction,
     payload,
     attempts: 0,
     createdAt: new Date().toISOString(),
@@ -57,12 +125,13 @@ export async function flushSyncQueue(
   module: SyncModule,
   processor: (item: SyncQueueItem) => Promise<void>,
 ): Promise<void> {
+  const normalizedModule = normalizeSyncModule(module);
   const queue = await getQueue();
   if (queue.length === 0) return;
 
   const remaining: SyncQueueItem[] = [];
   for (const item of queue) {
-    if (item.module !== module) {
+    if (item.module !== normalizedModule) {
       remaining.push(item);
       continue;
     }
@@ -72,13 +141,18 @@ export async function flushSyncQueue(
       console.info(`[sync] flushed ${item.module}:${item.action}`);
     } catch (error) {
       const attempts = item.attempts + 1;
-      if (attempts >= MAX_ATTEMPTS) {
-        console.warn(`[sync] dropped ${item.module}:${item.action} after ${attempts} attempts`, error);
+      const lastError = getSyncErrorMessage(error);
+      if (isPermanentSyncItemError(error)) {
+        console.warn(`[sync] dropped invalid ${item.module}:${item.action}: ${lastError}`);
+      } else if (attempts >= MAX_ATTEMPTS) {
+        console.warn(
+          `[sync] dropped ${item.module}:${item.action} after ${attempts} attempts: ${lastError}`,
+        );
       } else {
         remaining.push({
           ...item,
           attempts,
-          lastError: error instanceof Error ? error.message : String(error),
+          lastError,
         });
       }
     }

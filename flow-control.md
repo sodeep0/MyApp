@@ -1,6 +1,6 @@
 # Kaarma - Flow Control And Route Map
 
-> Last updated: 2026-04-25
+> Last updated: 2026-05-07
 > Scope: verified current navigation flow for the Expo Router app, with placeholders called out explicitly
 
 This document describes the app as it exists in code today. When a route, action, or settings item is only partially implemented, it is marked as `Partial` or `Planned` instead of being described as fully available.
@@ -195,14 +195,15 @@ Status: Partial
 What exists today:
 
 - dashboard UI
-- inline focus-session placeholder UI
-- inline blocked-app toggles
+- persisted inline focus-session UI with countdown, manual ending, and expiry cleanup
+- persisted inline blocked-app toggles
 - inline permission gate fallback
 - dedicated manage-app-limits route with set/clear persisted daily limits
 
 What does not exist yet:
 
-- real blocking/scheduling flows
+- native blocking enforcement
+- scheduling flows
 
 ## 7. Profile And Premium
 
@@ -215,19 +216,22 @@ Status: Verified shell, Partial settings flow
 What works:
 
 - guest-state auth entry buttons
+- guest-state data/privacy controls for Privacy & Security, Data Export, and Delete Local Data
 - signed-in profile card
 - inline display-name editing
 - logout flow
 - premium upsell badge
 - notifications route at `/profile/notifications`
 - dedicated privacy/security route at `/profile/privacy-security`
+- dedicated data export route at `/profile/data-export`
 
 What is still partial:
 
 - many settings rows are still presentational or placeholder only
 - notifications has a dedicated route, but advanced interaction/deep-link behavior is still incomplete
 - delete account is not implemented
-- data export/help rows do not yet route to dedicated screens
+- help rows do not yet route to dedicated screens
+- export currently shares a portable JSON snapshot; product still needs to decide saved-file naming, retention, import, and PDF/CSV variants
 
 ### Premium
 
@@ -312,6 +316,7 @@ app/
 |-- profile/
 |   |-- _layout.tsx
 |   |-- index.tsx
+|   |-- data-export.tsx
 |   |-- notifications.tsx
 |   `-- privacy-security.tsx
 `-- premium/
@@ -325,8 +330,8 @@ These are suggested improvements, not all current behavior:
 
 1. Keep `app/index.tsx` as the only documented launch gate and avoid describing `app/_layout.tsx` as a redirect controller.
 2. Treat `/auth` and `/oauthredirect` as callback/support routes in docs unless they become user-facing screens.
-3. Continue iterating the screen-time stack from the new manage-limits route into real blocking/session enforcement.
-4. Continue replacing placeholder settings rows with dedicated routes, following the `/profile/privacy-security` pattern.
+3. Continue iterating the screen-time stack from persisted focus-session state into native blocking enforcement and scheduling.
+4. Continue replacing placeholder settings rows with dedicated routes, following the `/profile/privacy-security` and `/profile/data-export` pattern.
 
 ## 11. Documentation Rule
 

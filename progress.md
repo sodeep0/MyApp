@@ -1,6 +1,6 @@
 # Kaarma - Implementation Progress
 
-> Last verified: 2026-04-25
+> Last verified: 2026-05-07
 > Status: working Expo prototype with local-first data, hybrid cloud foundation, real notification settings, and partial premium/screen-time enforcement
 
 ## Snapshot
@@ -19,10 +19,10 @@ It is still not release-ready. Several product rules from the original vision re
 
 ## Verified Quality Gates
 
-- `npx tsc --noEmit`: passing on 2026-04-25
-- `npm run lint`: passing on 2026-04-25
+- `npx tsc --noEmit`: passing on 2026-05-07
+- `npm run lint`: passing on 2026-05-07
 - Current lint status: 0 errors, 0 warnings
-- Automated tests: minimal storage-level tests now exist; broad app coverage is still missing
+- Automated tests: focused storage/domain tests now cover encryption helpers, sensitive-data resolution, feature gates including premium-aware habit history filtering, malformed premium-state, malformed gate-input, and malformed enforcement-option fail-closed behavior, safe malformed count handling, local-only policy plus local-only create gates, Firestore privacy policy, product-claim guardrails for billing, unsupported premium promises, and screen-time scope, bad-habit recovery metrics including future and duplicate same-day reset relapse handling, malformed sensitive-store entry normalization for journal, bad habits, and urge events, write-side normalization before sensitive local journal/bad-habit persistence, malformed goal and milestone normalization before repository domain operations, write-side rejection of malformed goal data, invalid goal-progress increment rejection, invalid goal-update data-loss prevention, local destructive goal-id rejection, malformed activity normalization before summaries and edit-window operations, write-side rejection of malformed activity data, invalid activity-update data-loss prevention, local destructive activity-id rejection, malformed habit and completion normalization before streak/history and delete-cleanup operations, write-side rejection of malformed habit/completion data, invalid habit-add/update data-loss prevention, orphan habit-completion rejection, local destructive habit-id rejection, malformed profile/display-name/intention normalization for guest-safe local behavior, write-side rejection of malformed profile/intention data, display-name and onboarding-state write normalization, Firebase sync flusher payload validation with immediate permanent-invalid drop behavior, normalized Firebase bulk-save queue payloads, Firebase delete-id validation before local mutation or sync enqueue, data export privacy policy including persisted screen-time settings, partial habit-completion warnings, and shared-export warning visibility, data-management reset policy including guest profile data controls, local-only reset boundaries, and all-settled cleanup failure reporting, auth/notification cleanup policy, notification/security settings normalization including malformed journal-lock values, notification scheduling helpers including managed-notification cleanup boundaries, best-effort per-notification scheduling and cancellation failure handling, valid habit-reminder candidate filtering, local date-only goal deadlines, and weekly review fallback behavior, repository domain rules including active-goal reactivation caps, screen-time premium gating policy with planning-only copy, screen-time state helpers including invalid and oversized app-limit and focus-session duration rejection, package-name normalization, corrupted persisted screen-time state normalization, safe screen-time display math, habit detail visible-history routing, and sync queue behavior including invalid-action rejection, runtime rejection of local-only modules, corrupted-queue recovery, permanent-invalid item dropping, and normalized max-attempt drop logging; broad app coverage is still missing
 
 ## Actual Stack
 
@@ -33,7 +33,7 @@ It is still not release-ready. Several product rules from the original vision re
 | Auth | Firebase Auth with Google + email/password flows |
 | Cloud data | Firestore repositories for profile, habits, goals, activities |
 | Sensitive data | Local-only stores with encrypted local persistence for journal and bad habits |
-| Screen time | Android usage stats service + demo fallback UI |
+| Screen time | Android usage stats service + demo fallback UI + persisted focus-session state |
 | Notifications | `expo-notifications` local scheduler + `expo-network` offline state |
 | Premium | Mock local subscription state in `useSubscription` |
 
@@ -67,7 +67,7 @@ It is still not release-ready. Several product rules from the original vision re
 | Firebase session bridge | Verified | Google ID token is exchanged with Firebase |
 | Anonymous auth bootstrap | Verified | Used to support cloud context when available |
 | Profile display name editing | Verified | Local and repository-backed updates exist |
-| Auth/session consistency | Partial | Profile/auth screens follow Firebase auth state, and logout now clears cloud-backed local cache plus pending sync items before returning to guest mode; broader session centralization is still pending |
+| Auth/session consistency | Partial | Profile/auth screens follow Firebase auth state, and logout now uses all-settled cleanup for cloud-backed local caches plus pending sync items before returning to guest mode; broader session centralization is still pending |
 | Email/password auth | Verified | Sign-in and create-account screens now use Firebase email/password helpers with validation and error states |
 
 ### Home dashboard
@@ -153,12 +153,12 @@ It is still not release-ready. Several product rules from the original vision re
 | Area | Status | Notes |
 |------|--------|-------|
 | Dashboard UI | Verified | Full screen exists |
-| Android usage stats integration | Partial | Service exists and reads usage on supported Android setups |
+| Android usage stats integration | Partial | Service exists and reads usage on supported Android setups; report aggregation now ignores malformed native usage rows and uses normalized local app-limit settings |
 | Demo/fallback data mode | Verified | Non-Android and no-permission states can still preview UI |
-| Focus session UI | Partial | UI exists and is now premium-gated, but it is not a real blocking session |
+| Focus session UI | Partial | Premium-gated sessions now persist active duration, countdown, expiry, manual ending, and selected blocked apps locally; native block enforcement is still not implemented |
 | Manage app limits screen | Verified | Dedicated route lists tracked apps and supports per-app set/clear daily limits via `screenTimeService` |
 | Limit persistence on dashboard | Verified | Saved app limits flow back into dashboard usage cards through shared report data |
-| App blocking | Planned | No native block enforcement |
+| App blocking | Partial | Blocked-app selections persist locally and are attached to focus sessions; no native block enforcement yet |
 | Scheduling | Planned | Not implemented |
 | iOS support | Deferred | Requires platform-specific native work |
 
@@ -189,14 +189,14 @@ It is still not release-ready. Several product rules from the original vision re
 | Area | Status | Notes |
 |------|--------|-------|
 | Local-only policy for sensitive modules | Verified | Journal and bad habits remain out of Firebase |
-| Encrypted local storage | Partial | Journal, bad habits, and urge events are encrypted locally with migration from legacy plaintext keys plus recovery-state detection/reset tooling |
-| Notifications | Partial | Local reminders cover habit reminders, streak-risk alerts, goal deadline nudges, and weekly review, with a dedicated settings screen for per-type toggles and weekly review time; delivery QA and deep-link handling are still pending |
-| Export/delete flows | Planned | Not implemented |
+| Encrypted local storage | Partial | Journal, bad habits, and urge events are encrypted locally with migration from legacy plaintext keys plus malformed-envelope recovery-state detection/reset tooling |
+| Notifications | Partial | Local reminders cover habit reminders, streak-risk alerts, goal deadline nudges, and weekly review, with a dedicated settings screen for per-type toggles and weekly review time; managed notification taps route to existing habit, goal, and weekly-review screens, but delivery and tap-through QA on native builds are still pending |
+| Export/delete flows | Partial | Profile exposes Data Export, local-device reset, and signed-in account/cloud deletion controls. Export includes persisted screen-time settings and explicit warnings if per-habit completions cannot be included, and shared exports place warning summaries before the JSON payload; reset clears local-only sensitive data, cloud-backed caches, sync queue, notification settings, premium flag, and screen-time state with all-settled cleanup failure reporting; account deletion removes cloud-eligible Firestore data plus the Firebase user and routes recent-login failures back to sign-in, but native QA is still pending |
 | Error boundaries | Partial | Root app shell now has a broad render boundary plus bootstrap retry state; async screen-level recovery is still limited |
 | Offline UX messaging | Verified | A global offline banner now explains local-first fallback and sync recovery |
 | Loading states | Partial | Shared loading states now cover the main hub/list/detail/edit fetch flows; broader long-tail coverage can still improve |
-| EAS config | Planned | `eas.json` not present |
-| Test coverage | Partial | Storage-level tests now cover secure envelope encrypt/decrypt and migration-resolution logic; app-wide unit/integration/UI coverage is still missing |
+| EAS config | Partial | Baseline `eas.json` profiles exist for development, preview, and production; production credentials, store metadata, and native-device QA are still pending |
+| Test coverage | Partial | Focused storage/domain tests cover secure envelope encrypt/decrypt, migration-resolution logic, feature gates including premium-aware habit history filtering, malformed premium-state, malformed gate-input, and malformed enforcement-option fail-closed behavior, safe malformed count handling, local-only policy plus local-only create gates, Firestore privacy policy, product-claim guardrails for billing, unsupported premium promises, and screen-time scope, bad-habit recovery metrics including future and duplicate same-day reset relapse handling, malformed sensitive-store entry normalization for journal, bad habits, and urge events, write-side normalization before sensitive local journal/bad-habit persistence, malformed goal and milestone normalization before repository domain operations, write-side rejection of malformed goal data, invalid goal-progress increment rejection, invalid goal-update data-loss prevention, local destructive goal-id rejection, malformed activity normalization before summaries and edit-window operations, write-side rejection of malformed activity data, invalid activity-update data-loss prevention, local destructive activity-id rejection, malformed habit and completion normalization before streak/history and delete-cleanup operations, write-side rejection of malformed habit/completion data, invalid habit-add/update data-loss prevention, orphan habit-completion rejection, local destructive habit-id rejection, malformed profile/display-name/intention normalization for guest-safe local behavior, write-side rejection of malformed profile/intention data, display-name and onboarding-state write normalization, Firebase sync flusher payload validation with immediate permanent-invalid drop behavior, normalized Firebase bulk-save queue payloads, Firebase delete-id validation before local mutation or sync enqueue, data export privacy policy including persisted screen-time settings, partial habit-completion warnings, and shared-export warning visibility, data-management reset policy including guest profile data controls, local-only reset boundaries, and all-settled cleanup failure reporting, auth/notification cleanup policy, notification/security settings normalization including malformed journal-lock values, notification scheduling helpers including managed-notification cleanup boundaries, best-effort per-notification scheduling and cancellation failure handling, valid habit-reminder candidate filtering, local date-only goal deadlines, and weekly review fallback behavior, repository domain rules including active-goal reactivation caps, screen-time premium gating policy with planning-only copy, screen-time state helpers including invalid and oversized app-limit and focus-session duration rejection, package-name normalization, corrupted persisted screen-time state normalization, safe screen-time display math, habit detail visible-history routing, and sync queue behavior including invalid-action rejection, runtime rejection of local-only modules, corrupted-queue recovery, permanent-invalid item dropping, and normalized max-attempt drop logging; app-wide unit/integration/UI coverage is still missing |
 
 ## Key Gaps Blocking A Strong MVP
 
@@ -207,8 +207,9 @@ It is still not release-ready. Several product rules from the original vision re
 
 2. Some flows are still prototype-grade:
    - screen-time blocking/session enforcement
-   - notification delivery QA
-   - export and deletion flows
+   - notification delivery and tap-through QA
+   - native QA for Firebase account/cloud deletion and recent-login recovery
+   - product decisions for export file delivery/retention
 
 3. Documentation had drifted from code:
    - auth implementation details
@@ -219,7 +220,8 @@ It is still not release-ready. Several product rules from the original vision re
 
 4. Notification and lifecycle work is better but still prototype-grade:
    - native-build/device QA for scheduled notifications
-   - notification deep links and richer interaction handling
+   - native-build/device QA for managed notification tap-through behavior
+   - richer notification interaction handling
    - broader async recovery beyond the main shell
 
 ## Roadmap
@@ -246,7 +248,7 @@ Status:
 - Shared feature-gate helpers now drive the main free-tier and premium upgrade prompts across create flows, habit history, and screen-time placeholders
 - Screen-time premium placeholders are now routed behind Premium prompts
 - Auth/profile guest-vs-signed-in behavior now follows Firebase auth state; broader session centralization remains open
-- Logout now clears cached cloud-backed profile, habit, goal, and activity data plus related sync-queue items before guest mode resumes
+- Logout now clears cached cloud-backed profile, habit, goal, and activity data plus related sync-queue items with all-settled cleanup before guest mode resumes
 
 ### Phase 3 - Security and privacy hardening
 
@@ -260,8 +262,8 @@ Status:
 - Profile settings now includes a dedicated Privacy & Security screen
 - Journal routes now enforce biometric/device-auth unlock when journal lock is enabled
 - Journal unlock checks now apply consistently across Home/Track entry points plus route-level guards for deep links
-- Privacy & Security now exposes secure-data recovery/reset when decryption/key mismatch is detected
-- Storage-level tests now verify secure envelope roundtrip and migration fallback behavior
+- Privacy & Security now exposes secure-data recovery/reset when decryption/key mismatch or malformed encrypted envelopes are detected
+- Focused storage/domain tests now verify secure envelope roundtrip, migration fallback behavior, feature gates, local-only policy, notification scheduling helpers, and sync queue behavior
 
 ### Phase 4 - Notifications and lifecycle polish
 
@@ -288,13 +290,14 @@ Status:
 
 - A dedicated `Manage App Limits` route now exists from the screen-time dashboard
 - Tracked apps can now store and clear per-app daily limits through `getAppLimit`/`setAppLimit`
-- Focus sessions, schedules, and true blocking behavior remain unfinished
+- Focus sessions now persist active session timing and blocked-app selections through reloads, tick down on the dashboard, and clear when ended or expired
+- Schedules and true native blocking behavior remain unfinished
 
 ### Phase 6 - Release prep
 
-- Add `eas.json`
+- Baseline `eas.json` profiles now exist; production credentials, store metadata, and device QA remain pending
 - Finalize package/branding metadata
-- Add test coverage for store logic, routing guards, and sync queue behavior
+- Add broader test coverage for store logic, routing guards, and UI-facing flows
 - Run device QA for online/offline/reconnect/auth flows
 
 ## Expected Near-Term Outcome

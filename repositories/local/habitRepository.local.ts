@@ -2,9 +2,25 @@ import { storage } from '@/storage/asyncStorage';
 import type { Habit, HabitCompletion } from '@/types/models';
 import { generateUUID } from '@/stores/baseStore';
 import type { HabitRepository } from '@/repositories/interfaces/habitRepository';
+import { normalizeHabitCompletions, normalizeHabits } from '@/repositories/habitNormalization';
 
 const HABITS_KEY = 'kaarma_habits';
 const COMPLETIONS_KEY = 'kaarma_habit_completions';
+
+function requireValidHabit(habit: Habit, message: string): Habit {
+  const [normalizedHabit] = normalizeHabits([habit]);
+  if (!normalizedHabit) {
+    throw new Error(message);
+  }
+  return normalizedHabit;
+}
+
+function requireHabitId(id: string): string {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new Error('Habit id must be a non-empty string.');
+  }
+  return id.trim();
+}
 
 function todayStr(): string {
   const d = new Date();
@@ -15,7 +31,7 @@ function todayStr(): string {
 }
 
 async function getAllCompletions(): Promise<HabitCompletion[]> {
-  return (await storage.getItem<HabitCompletion[]>(COMPLETIONS_KEY)) ?? [];
+  return normalizeHabitCompletions(await storage.getItem<unknown>(COMPLETIONS_KEY, []));
 }
 
 export async function clearHabitLocalCache(): Promise<void> {
@@ -27,7 +43,7 @@ export async function clearHabitLocalCache(): Promise<void> {
 
 export const habitLocalRepository: HabitRepository = {
   async getAllHabits() {
-    return (await storage.getItem<Habit[]>(HABITS_KEY)) ?? [];
+    return normalizeHabits(await storage.getItem<unknown>(HABITS_KEY, []));
   },
 
   async getHabitById(id) {
@@ -36,7 +52,7 @@ export const habitLocalRepository: HabitRepository = {
   },
 
   async saveHabits(habits) {
-    await storage.setItem(HABITS_KEY, habits);
+    await storage.setItem(HABITS_KEY, normalizeHabits(habits));
   },
 
   async addHabit(data) {
@@ -48,7 +64,8 @@ export const habitLocalRepository: HabitRepository = {
       isArchived: false,
       streakShieldsRemaining: 0,
     };
-    const updatedHabits = [...habits, newHabit];
+    const normalizedHabit = requireValidHabit(newHabit, 'Habit data must be valid before saving.');
+    const updatedHabits = [...habits, normalizedHabit];
     await this.saveHabits(updatedHabits);
     return updatedHabits;
   },
@@ -57,18 +74,22 @@ export const habitLocalRepository: HabitRepository = {
     const habits = await this.getAllHabits();
     const idx = habits.findIndex((h) => h.id === id);
     if (idx === -1) return null;
-    habits[idx] = { ...habits[idx], ...updates };
+    habits[idx] = requireValidHabit(
+      { ...habits[idx], ...updates },
+      'Habit update would create invalid habit data.',
+    );
     await this.saveHabits(habits);
     return habits[idx];
   },
 
   async deleteHabit(id) {
+    const normalizedId = requireHabitId(id);
     const habits = await this.getAllHabits();
-    await this.saveHabits(habits.filter((h) => h.id !== id));
+    await this.saveHabits(habits.filter((h) => h.id !== normalizedId));
     const all = await getAllCompletions();
     await storage.setItem(
       COMPLETIONS_KEY,
-      all.filter((c) => c.habitId !== id),
+      all.filter((c) => c.habitId !== normalizedId),
     );
   },
 
@@ -84,10 +105,15 @@ export const habitLocalRepository: HabitRepository = {
   },
 
   async saveCompletions(completions) {
-    await storage.setItem(COMPLETIONS_KEY, completions);
+    await storage.setItem(COMPLETIONS_KEY, normalizeHabitCompletions(completions));
   },
 
   async markHabitComplete(habitId) {
+    const habit = await this.getHabitById(habitId);
+    if (!habit) {
+      throw new Error('Habit must exist before it can be completed.');
+    }
+
     const all = await getAllCompletions();
     const today = todayStr();
     const exists = all.find((c) => c.habitId === habitId && c.completedDate === today);
@@ -104,11 +130,12 @@ export const habitLocalRepository: HabitRepository = {
   },
 
   async unmarkHabitComplete(habitId) {
+    const normalizedId = requireHabitId(habitId);
     const all = await getAllCompletions();
     const today = todayStr();
     await storage.setItem(
       COMPLETIONS_KEY,
-      all.filter((c) => !(c.habitId === habitId && c.completedDate === today)),
+      all.filter((c) => !(c.habitId === normalizedId && c.completedDate === today)),
     );
   },
 };

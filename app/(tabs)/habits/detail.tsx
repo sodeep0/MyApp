@@ -26,6 +26,7 @@ import { RingProgress } from '@/components/RingProgress';
 import {
   getHabitById,
   getCompletionsForHabit,
+  getVisibleCompletionsForHabit,
   getTodayCompletionsForHabit,
   markHabitComplete,
   calculateStreak,
@@ -108,6 +109,7 @@ export default function HabitDetailScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('calendar');
   const [habit, setHabit] = useState<Habit | null>(null);
   const [completions, setCompletions] = useState<HabitCompletion[]>([]);
+  const [visibleCompletions, setVisibleCompletions] = useState<HabitCompletion[]>([]);
   const [completedToday, setCompletedToday] = useState(false);
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
@@ -132,12 +134,16 @@ export default function HabitDetailScreen() {
     }
     setHabit(habitData);
 
-    const comps = await getCompletionsForHabit(id);
-    const todayComps = await getTodayCompletionsForHabit(id);
+    const [comps, visibleComps, todayComps] = await Promise.all([
+      getCompletionsForHabit(id),
+      getVisibleCompletionsForHabit(id),
+      getTodayCompletionsForHabit(id),
+    ]);
     const currentStreak = calculateStreak(comps, habitData.frequency, habitData.weekDays, habitData.timesPerWeek, habitData.everyNDays);
     const calculatedBest = calculateBestStreak(comps, habitData.frequency, habitData.weekDays, habitData.timesPerWeek, habitData.everyNDays);
 
     setCompletions(comps);
+    setVisibleCompletions(visibleComps);
     setCompletedToday(todayComps.length > 0);
     setAtRisk(isHabitAtRisk(habitData, comps));
     setStreak(currentStreak);
@@ -220,14 +226,11 @@ export default function HabitDetailScreen() {
   const calendarStartDate = isPremium
     ? habit.createdAt.slice(0, 10)
     : getMaxDateString(habit.createdAt.slice(0, 10), historyCutoffStr);
-  const calendarCompletions = isPremium
-    ? completions
-    : completions.filter((completion) => completion.completedDate >= historyCutoffStr);
   const hasOlderHistory = completions.some(
     (completion) => completion.completedDate < historyCutoffStr,
   );
   const habitHistoryGate = getPremiumFeatureGate('habitHistory', isPremium, hasOlderHistory);
-  const cal = getMonthlyCalendar(calendarCompletions, calendarStartDate, calendarMonth);
+  const cal = getMonthlyCalendar(visibleCompletions, calendarStartDate, calendarMonth);
   const now = new Date();
   const currentMonthIndex = now.getFullYear() * 12 + now.getMonth();
   const viewedMonthIndex = calendarMonth.getFullYear() * 12 + calendarMonth.getMonth();

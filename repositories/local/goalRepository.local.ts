@@ -4,8 +4,24 @@ import { storage } from '@/storage/asyncStorage';
 import { generateUUID } from '@/stores/baseStore';
 import type { GoalRepository } from '@/repositories/interfaces/goalRepository';
 import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
+import { normalizeGoals } from '@/repositories/goalNormalization';
 
 const GOALS_KEY = 'kaarma_goals';
+
+function requireValidGoal(goal: Goal, message: string): Goal {
+  const [normalizedGoal] = normalizeGoals([goal]);
+  if (!normalizedGoal) {
+    throw new Error(message);
+  }
+  return normalizedGoal;
+}
+
+function requireGoalId(id: string): string {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new Error('Goal id must be a non-empty string.');
+  }
+  return id.trim();
+}
 
 export async function clearGoalLocalCache(): Promise<void> {
   await storage.removeItem(GOALS_KEY);
@@ -13,7 +29,8 @@ export async function clearGoalLocalCache(): Promise<void> {
 
 export const goalLocalRepository: GoalRepository = {
   async getAllGoals() {
-    return (await storage.getItem<Goal[]>(GOALS_KEY)) ?? [];
+    const goals = await storage.getItem<unknown>(GOALS_KEY, []);
+    return normalizeGoals(goals);
   },
 
   async getGoalById(id) {
@@ -22,7 +39,7 @@ export const goalLocalRepository: GoalRepository = {
   },
 
   async saveGoals(goals) {
-    await storage.setItem(GOALS_KEY, goals);
+    await storage.setItem(GOALS_KEY, normalizeGoals(goals));
   },
 
   async addGoal(data) {
@@ -37,8 +54,9 @@ export const goalLocalRepository: GoalRepository = {
       createdAt: new Date().toISOString(),
       completedAt: null,
     };
-    await this.saveGoals([...goals, newGoal]);
-    return newGoal;
+    const normalizedGoal = requireValidGoal(newGoal, 'Goal data must be valid before saving.');
+    await this.saveGoals([...goals, normalizedGoal]);
+    return normalizedGoal;
   },
 
   async updateGoal(id, updates) {
@@ -55,17 +73,25 @@ export const goalLocalRepository: GoalRepository = {
       enabled: isBecomingActive,
     });
 
-    goals[idx] = { ...goals[idx], ...updates };
+    goals[idx] = requireValidGoal(
+      { ...goals[idx], ...updates },
+      'Goal update would create invalid goal data.',
+    );
     await this.saveGoals(goals);
     return goals[idx];
   },
 
   async deleteGoal(id) {
+    const normalizedId = requireGoalId(id);
     const goals = await this.getAllGoals();
-    await this.saveGoals(goals.filter((g) => g.id !== id));
+    await this.saveGoals(goals.filter((g) => g.id !== normalizedId));
   },
 
   async incrementGoalProgress(id, amount) {
+    if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+      throw new Error('Goal progress increment amount must be a finite number.');
+    }
+
     const goals = await this.getAllGoals();
     const goal = goals.find((g) => g.id === id);
     if (!goal) return null;
