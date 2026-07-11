@@ -32,11 +32,13 @@ test('premium screen labels the mock subscription flow as a preview', () => {
   assert.doesNotMatch(source, /Restore Purchases/);
   assert.doesNotMatch(source, /Unlock everything/);
   assert.doesNotMatch(source, /Cloud backup & data export/);
+  assert.doesNotMatch(source, /Cloud-eligible sync foundations and data export/);
+  assert.doesNotMatch(source, /Expanded streak insights/);
   assert.match(source, /Enable Premium Preview/);
   assert.match(source, /Premium Preview/);
   assert.match(source, /billing is still mocked/);
   assert.match(source, /Refresh Preview/);
-  assert.match(source, /Cloud-eligible sync foundations and data export/);
+  assert.match(source, /Unlimited habit history/);
   assert.match(source, /Production billing is not connected yet/);
 });
 

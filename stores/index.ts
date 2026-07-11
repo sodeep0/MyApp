@@ -4,4 +4,4 @@ export * from './badHabitStore';
 export * from './journalStore';
 export * from './activityStore';
 export * from './userStore';
-export { generateUUID } from './baseStore';
+export { generateUUID } from '@/utils/id';

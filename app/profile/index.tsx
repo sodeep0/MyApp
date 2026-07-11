@@ -15,6 +15,7 @@ import { CommonStyles } from '@/constants/commonStyles';
 import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { LoadingState } from '@/components/LoadingState';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useSubscription } from '@/hooks/useSubscription';
 import { signOutCurrentUser } from '@/services/firebase/auth';
@@ -28,18 +29,9 @@ import { getDisplayName, updateDisplayName } from '@/stores/userStore';
 
 const SETTINGS_SECTIONS = [
   {
-    title: 'Account',
-    items: [
-      { icon: 'person-outline' as const, label: 'Edit Profile', route: null, tint: Colors.SteelBlue },
-      { icon: 'mail-outline' as const, label: 'Email & Password', route: null, tint: Colors.SteelBlue },
-    ],
-  },
-  {
     title: 'Preferences',
     items: [
       { icon: 'notifications-outline' as const, label: 'Notifications', route: '/profile/notifications', tint: Colors.Success },
-      { icon: 'moon-outline' as const, label: 'Appearance', route: null, tint: Colors.TextSecondary },
-      { icon: 'globe-outline' as const, label: 'Language', route: null, tint: Colors.SteelBlue },
     ],
   },
   {
@@ -50,28 +42,6 @@ const SETTINGS_SECTIONS = [
       { icon: 'trash-outline' as const, label: 'Delete Local Data', route: null, tint: Colors.Danger },
       { icon: 'trash-bin-outline' as const, label: 'Delete Account & Cloud Data', route: null, tint: Colors.Danger },
     ],
-  },
-  {
-    title: 'About',
-    items: [
-      { icon: 'star-outline' as const, label: 'Rate Kaarma', route: null, tint: Colors.Warning },
-      { icon: 'help-circle-outline' as const, label: 'Help & Support', route: null, tint: Colors.SteelBlue },
-    ],
-  },
-];
-
-const GUEST_PREFERENCES = [
-  {
-    icon: 'moon-outline' as const,
-    label: 'Appearance',
-    value: 'Light Mode',
-    tint: Colors.SteelBlue,
-  },
-  {
-    icon: 'globe-outline' as const,
-    label: 'Language',
-    value: 'English',
-    tint: Colors.SteelBlue,
   },
 ];
 
@@ -96,29 +66,15 @@ const GUEST_DATA_PRIVACY = [
   },
 ];
 
-const GUEST_APP_INFO = [
-  {
-    icon: 'information-circle-outline' as const,
-    label: 'About Kaarma',
-    external: true,
-    tint: Colors.Warning,
-  },
-  {
-    icon: 'help-circle-outline' as const,
-    label: 'Help & Support',
-    tint: Colors.SteelBlue,
-  },
-  {
-    icon: 'star-outline' as const,
-    label: 'Rate the App',
-    tint: Colors.SteelBlue,
-  },
-];
-
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, email: authEmail, displayName: authDisplayName } = useAuthSession();
+  const {
+    isAuthenticated,
+    loading: authLoading,
+    email: authEmail,
+    displayName: authDisplayName,
+  } = useAuthSession();
   const { isPremium } = useSubscription();
   const [displayName, setDisplayName] = useState('User');
   const [editingName, setEditingName] = useState(false);
@@ -251,6 +207,16 @@ export default function ProfileScreen() {
 
   const email = authEmail ?? 'user@kaarma.app';
 
+  if (authLoading) {
+    return (
+      <LoadingState
+        fullScreen
+        title="Loading Settings"
+        message="Checking whether this device is in guest mode or signed in."
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={[styles.headerBar, { paddingTop: insets.top }]}>
@@ -323,58 +289,6 @@ export default function ProfileScreen() {
                       {item.label}
                     </Text>
                     <Ionicons name="chevron-forward" size={16} color={Colors.TextSecondary} />
-                  </Pressable>
-                ))}
-              </Card>
-            </View>
-
-            <View style={styles.guestSection}>
-              <View style={styles.guestSectionDivider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.guestSectionTitle}>Preferences</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              <Card style={styles.sectionCard} noShadow>
-                {GUEST_PREFERENCES.map((item, idx) => (
-                  <Pressable
-                    key={item.label}
-                    style={[styles.menuItem, idx < GUEST_PREFERENCES.length - 1 && styles.menuItemBorder]}
-                  >
-                    <View style={[styles.menuIcon, { backgroundColor: item.tint + '18' }]}>
-                      <Ionicons name={item.icon} size={16} color={item.tint} />
-                    </View>
-                    <Text style={styles.menuLabel}>{item.label}</Text>
-                    <Text style={styles.trailingValue}>{item.value}</Text>
-                    <Ionicons name="chevron-forward" size={16} color={Colors.TextSecondary} />
-                  </Pressable>
-                ))}
-              </Card>
-            </View>
-
-            <View style={styles.guestSection}>
-              <View style={styles.guestSectionDivider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.guestSectionTitle}>App Info</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              <Card style={styles.sectionCard} noShadow>
-                {GUEST_APP_INFO.map((item, idx) => (
-                  <Pressable
-                    key={item.label}
-                    style={[styles.menuItem, idx < GUEST_APP_INFO.length - 1 && styles.menuItemBorder]}
-                    onPress={() => Alert.alert(item.label, 'This option will be available soon.')}
-                  >
-                    <View style={[styles.menuIcon, { backgroundColor: item.tint + '18' }]}>
-                      <Ionicons name={item.icon} size={16} color={item.tint} />
-                    </View>
-                    <Text style={styles.menuLabel}>{item.label}</Text>
-                    <Ionicons
-                      name={item.external ? 'open-outline' : 'chevron-forward'}
-                      size={16}
-                      color={Colors.TextSecondary}
-                    />
                   </Pressable>
                 ))}
               </Card>

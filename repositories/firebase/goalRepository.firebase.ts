@@ -6,11 +6,9 @@ import {
   orderBy,
   query,
   setDoc,
-  where,
   type Firestore,
 } from 'firebase/firestore';
 import type { Goal } from '@/types/models';
-import { GoalStatus } from '@/types/models';
 import { normalizeGoals } from '@/repositories/goalNormalization';
 import type { GoalRepository } from '@/repositories/interfaces/goalRepository';
 import { goalLocalRepository } from '@/repositories/local/goalRepository.local';
@@ -73,17 +71,41 @@ export async function flushGoalQueue(): Promise<void> {
   });
 }
 
+let isRefreshingGoals = false;
+
+function runInBackground(task: () => Promise<void>): void {
+  void task().catch((error) => {
+    console.warn('Goals background sync task failed.', error);
+  });
+}
+
+function refreshGoalsFromCloudInBackground(): void {
+  if (isRefreshingGoals) return;
+  isRefreshingGoals = true;
+
+  runInBackground(async () => {
+    try {
+      const context = await getCloudContext();
+      if (!context) return;
+
+      await flushGoalQueue();
+      const q = query(collection(context.db, goalsPath(context.uid)), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      const goals = normalizeGoals(snap.docs.map((d) => d.data()));
+      await goalLocalRepository.saveGoals(goals);
+    } catch (error) {
+      console.warn('Goals cloud refresh failed; keeping local cache.', error);
+    } finally {
+      isRefreshingGoals = false;
+    }
+  });
+}
+
 export const goalFirebaseRepository: GoalRepository = {
   async getAllGoals() {
-    const context = await getCloudContext();
-    if (!context) return goalLocalRepository.getAllGoals();
-
-    await flushGoalQueue();
-    const q = query(collection(context.db, goalsPath(context.uid)), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    const goals = normalizeGoals(snap.docs.map((d) => d.data()));
-    await goalLocalRepository.saveGoals(goals);
-    return goals;
+    const localGoals = await goalLocalRepository.getAllGoals();
+    refreshGoalsFromCloudInBackground();
+    return localGoals;
   },
 
   async getGoalById(id) {
@@ -179,18 +201,6 @@ export const goalFirebaseRepository: GoalRepository = {
   },
 
   async getActiveGoalCount() {
-    const context = await getCloudContext();
-    if (!context) {
-      return goalLocalRepository.getActiveGoalCount();
-    }
-
-    await flushGoalQueue();
-    const q = query(
-      collection(context.db, goalsPath(context.uid)),
-      where('status', '==', GoalStatus.ACTIVE),
-      orderBy('updatedAt', 'desc'),
-    );
-    const snap = await getDocs(q);
-    return snap.size;
+    return goalLocalRepository.getActiveGoalCount();
   },
 };

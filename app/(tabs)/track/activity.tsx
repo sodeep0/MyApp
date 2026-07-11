@@ -46,17 +46,26 @@ export default function ActivityLogScreen() {
   const [quickLogs, setQuickLogs] = useState<string[]>([]);
   const [weeklySummary, setWeeklySummary] = useState<{ totalMinutes: number; byCategory: Record<string, number>; byDay?: Record<string, number> }>({ totalMinutes: 0, byCategory: {} });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
-    const [activityData, summary, frequentNames] = await Promise.all([
-      getAllActivities(),
-      getWeeklySummary(),
-      getFrequentActivityNames(3),
-    ]);
-    setActivities(activityData);
-    setWeeklySummary(summary);
-    setQuickLogs(frequentNames);
-    setLoading(false);
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [activityData, summary, frequentNames] = await Promise.all([
+        getAllActivities(),
+        getWeeklySummary(),
+        getFrequentActivityNames(3),
+      ]);
+      setActivities(activityData);
+      setWeeklySummary(summary);
+      setQuickLogs(frequentNames);
+    } catch (error) {
+      console.warn('Activity log failed to load.', error);
+      setLoadError('Could not load activities. Check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -100,6 +109,15 @@ export default function ActivityLogScreen() {
       >
         {loading ? (
           <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, textAlign: 'center', paddingVertical: Spacing.xxl }}>Loading...</Text>
+        ) : loadError ? (
+          <View style={{ alignItems: 'center', paddingVertical: Spacing.xxl, gap: Spacing.md }}>
+            <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, textAlign: 'center' }}>
+              {loadError}
+            </Text>
+            <Pressable onPress={() => void loadData()} style={styles.retryBtn}>
+              <Text style={{ ...Typography.Body2, color: Colors.SteelBlue, fontWeight: '600' }}>Try again</Text>
+            </Pressable>
+          </View>
         ) : (
           <>
             <Card style={styles.summaryCard}>
@@ -258,6 +276,12 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     ...CommonStyles.stackHeaderSubtitle,
+  },
+  retryBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Shapes.Button,
+    backgroundColor: Colors.SurfaceContainerLow,
   },
   scrollContent: {
     padding: Spacing.md,

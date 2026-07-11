@@ -1,7 +1,7 @@
 # Kaarma - Implementation Progress
 
-> Last verified: 2026-05-07
-> Status: working Expo prototype with local-first data, hybrid cloud foundation, real notification settings, and partial premium/screen-time enforcement
+> Last verified: 2026-07-11
+> Status: working Expo prototype with local-first data, hybrid cloud foundation, audit remediation (account deletion, anonymous linking, local-first cloud reads, CI, encryption fail-closed)
 
 ## Snapshot
 
@@ -19,10 +19,13 @@ It is still not release-ready. Several product rules from the original vision re
 
 ## Verified Quality Gates
 
-- `npx tsc --noEmit`: passing on 2026-05-07
-- `npm run lint`: passing on 2026-05-07
+- `npx tsc --noEmit` / `npm run typecheck`: passing on 2026-07-11
+- `npm run lint`: passing on 2026-07-11
+- `npm run test:storage`: passing on 2026-07-11 (157 tests)
 - Current lint status: 0 errors, 0 warnings
-- Automated tests: focused storage/domain tests now cover encryption helpers, sensitive-data resolution, feature gates including premium-aware habit history filtering, malformed premium-state, malformed gate-input, and malformed enforcement-option fail-closed behavior, safe malformed count handling, local-only policy plus local-only create gates, Firestore privacy policy, product-claim guardrails for billing, unsupported premium promises, and screen-time scope, bad-habit recovery metrics including future and duplicate same-day reset relapse handling, malformed sensitive-store entry normalization for journal, bad habits, and urge events, write-side normalization before sensitive local journal/bad-habit persistence, malformed goal and milestone normalization before repository domain operations, write-side rejection of malformed goal data, invalid goal-progress increment rejection, invalid goal-update data-loss prevention, local destructive goal-id rejection, malformed activity normalization before summaries and edit-window operations, write-side rejection of malformed activity data, invalid activity-update data-loss prevention, local destructive activity-id rejection, malformed habit and completion normalization before streak/history and delete-cleanup operations, write-side rejection of malformed habit/completion data, invalid habit-add/update data-loss prevention, orphan habit-completion rejection, local destructive habit-id rejection, malformed profile/display-name/intention normalization for guest-safe local behavior, write-side rejection of malformed profile/intention data, display-name and onboarding-state write normalization, Firebase sync flusher payload validation with immediate permanent-invalid drop behavior, normalized Firebase bulk-save queue payloads, Firebase delete-id validation before local mutation or sync enqueue, data export privacy policy including persisted screen-time settings, partial habit-completion warnings, and shared-export warning visibility, data-management reset policy including guest profile data controls, local-only reset boundaries, and all-settled cleanup failure reporting, auth/notification cleanup policy, notification/security settings normalization including malformed journal-lock values, notification scheduling helpers including managed-notification cleanup boundaries, best-effort per-notification scheduling and cancellation failure handling, valid habit-reminder candidate filtering, local date-only goal deadlines, and weekly review fallback behavior, repository domain rules including active-goal reactivation caps, screen-time premium gating policy with planning-only copy, screen-time state helpers including invalid and oversized app-limit and focus-session duration rejection, package-name normalization, corrupted persisted screen-time state normalization, safe screen-time display math, habit detail visible-history routing, and sync queue behavior including invalid-action rejection, runtime rejection of local-only modules, corrupted-queue recovery, permanent-invalid item dropping, and normalized max-attempt drop logging; broad app coverage is still missing
+- CI: `.github/workflows/ci.yml` runs typecheck, lint, and `test:storage` on PRs
+- MVP manual/native QA checklist: `docs/mvp-qa-checklist.md` defines the release-readiness checks, but those manual and native-device items are not yet marked as run
+- Automated tests: focused storage/domain tests cover encryption helpers, auth upgrade policy, account-deletion rules/resilience, sync drop telemetry, local-first cloud read policies, feature gates, local-only privacy, and related domain rules; broad UI/E2E coverage is still missing
 
 ## Actual Stack
 
@@ -67,7 +70,7 @@ It is still not release-ready. Several product rules from the original vision re
 | Firebase session bridge | Verified | Google ID token is exchanged with Firebase |
 | Anonymous auth bootstrap | Verified | Used to support cloud context when available |
 | Profile display name editing | Verified | Local and repository-backed updates exist |
-| Auth/session consistency | Partial | Profile/auth screens follow Firebase auth state, and logout now uses all-settled cleanup for cloud-backed local caches plus pending sync items before returning to guest mode; broader session centralization is still pending |
+| Auth/session consistency | Partial | Profile/auth screens follow Firebase auth state, profile now waits for auth loading before choosing guest vs signed-in UI, and logout now uses all-settled cleanup for cloud-backed local caches plus pending sync items before returning to guest mode; broader session centralization is still pending |
 | Email/password auth | Verified | Sign-in and create-account screens now use Firebase email/password helpers with validation and error states |
 
 ### Home dashboard
@@ -80,7 +83,7 @@ It is still not release-ready. Several product rules from the original vision re
 | Bad habit recovery card | Verified | Reads local bad-habit data |
 | Quick actions grid | Verified | Home shortcuts exist |
 | Floating action sheet | Verified | Modal quick actions exist |
-| Notification bell | Planned | Not present in the current Home screen |
+| Notification bell | Verified | Home now exposes a reminder card and notification shortcut backed by current notification settings |
 
 ### Habits
 
@@ -118,6 +121,7 @@ It is still not release-ready. Several product rules from the original vision re
 | Bad habit detail | Verified | Recovery metrics, event log, quick actions |
 | Add/edit bad habit | Verified | Full local form flow |
 | Relapse sheet | Verified | Modal flow exists |
+| Recovery support prompt | Verified | Resisted-urge and relapse logging now surface local-only next-step support copy without syncing sensitive data |
 | Days clean logic | Verified | Current/best/total streak helpers exist |
 | Local-only policy | Verified | Store does not use Firebase |
 | Encryption | Partial | Local encrypted persistence now protects bad-habit and urge-event data; deeper key lifecycle hardening is still pending |
@@ -155,10 +159,10 @@ It is still not release-ready. Several product rules from the original vision re
 | Dashboard UI | Verified | Full screen exists |
 | Android usage stats integration | Partial | Service exists and reads usage on supported Android setups; report aggregation now ignores malformed native usage rows and uses normalized local app-limit settings |
 | Demo/fallback data mode | Verified | Non-Android and no-permission states can still preview UI |
-| Focus session UI | Partial | Premium-gated sessions now persist active duration, countdown, expiry, manual ending, and selected blocked apps locally; native block enforcement is still not implemented |
+| Focus session UI | Partial | Premium-gated sessions now persist active duration, countdown, expiry, manual ending, and selected focus-plan apps locally; UI now states native blocking is not enforced |
 | Manage app limits screen | Verified | Dedicated route lists tracked apps and supports per-app set/clear daily limits via `screenTimeService` |
 | Limit persistence on dashboard | Verified | Saved app limits flow back into dashboard usage cards through shared report data |
-| App blocking | Partial | Blocked-app selections persist locally and are attached to focus sessions; no native block enforcement yet |
+| App blocking | Partial | Focus-plan app selections persist locally and are attached to focus sessions; no native block enforcement yet |
 | Scheduling | Planned | Not implemented |
 | iOS support | Deferred | Requires platform-specific native work |
 
@@ -263,6 +267,7 @@ Status:
 - Journal routes now enforce biometric/device-auth unlock when journal lock is enabled
 - Journal unlock checks now apply consistently across Home/Track entry points plus route-level guards for deep links
 - Privacy & Security now exposes secure-data recovery/reset when decryption/key mismatch or malformed encrypted envelopes are detected
+- Bad-habit recovery now shows local-only resisted-urge and relapse support prompts after logging events
 - Focused storage/domain tests now verify secure envelope roundtrip, migration fallback behavior, feature gates, local-only policy, notification scheduling helpers, and sync queue behavior
 
 ### Phase 4 - Notifications and lifecycle polish
@@ -277,6 +282,7 @@ Status:
 - Habit reminder schedules, daily streak-risk alerts, goal deadline nudges, and weekly review notifications now sync from real store data
 - Onboarding and profile notification controls now manage real permission-aware scheduling state
 - Profile now includes a dedicated notifications settings route with a master toggle, per-reminder toggles, and weekly review time editing
+- Home now exposes notification status through a reminder card and bell shortcut into notification settings
 - Global offline banner, shared loading states, and broader app-shell error recovery are now in place
 
 ### Phase 5 - Screen time completion

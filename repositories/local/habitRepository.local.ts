@@ -1,6 +1,6 @@
 import { storage } from '@/storage/asyncStorage';
 import type { Habit, HabitCompletion } from '@/types/models';
-import { generateUUID } from '@/stores/baseStore';
+import { generateUUID } from '@/utils/id';
 import type { HabitRepository } from '@/repositories/interfaces/habitRepository';
 import { normalizeHabitCompletions, normalizeHabits } from '@/repositories/habitNormalization';
 
@@ -96,6 +96,10 @@ export const habitLocalRepository: HabitRepository = {
   async getCompletionsForHabit(habitId) {
     const all = await getAllCompletions();
     return all.filter((c) => c.habitId === habitId);
+  },
+
+  async getAllCompletions() {
+    return getAllCompletions();
   },
 
   async getTodayCompletionsForHabit(habitId) {

@@ -35,10 +35,8 @@ const DefaultTextInput = TextInput as typeof TextInput & {
 };
 
 DefaultText.defaultProps = DefaultText.defaultProps ?? {};
-DefaultText.defaultProps.allowFontScaling = false;
-
 DefaultTextInput.defaultProps = DefaultTextInput.defaultProps ?? {};
-DefaultTextInput.defaultProps.allowFontScaling = false;
+// Font scaling follows system accessibility settings.
 
 export default function RootLayout() {
   const [bootstrapping, setBootstrapping] = useState(true);

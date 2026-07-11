@@ -148,7 +148,7 @@ export default function ManageAppLimitsScreen() {
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Manage App Limits</Text>
-          <Text style={styles.headerSubtitle}>Set daily limits for tracked apps</Text>
+          <Text style={styles.headerSubtitle}>Set daily awareness limits for tracked apps</Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
@@ -184,7 +184,8 @@ export default function ManageAppLimitsScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Text style={styles.helperText}>
-            Limits are in minutes per day. Leave blank and tap Clear to remove a limit.
+            Limits are in minutes per day and are used for dashboard warnings.
+            They do not block apps. Leave blank and tap Clear to remove a limit.
           </Text>
 
           <View style={styles.card}>

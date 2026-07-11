@@ -35,6 +35,7 @@ const MILESTONES = [7, 14, 21, 30, 60, 90, 180, 365];
 const PREVIEW_LOG_COUNT = 4;
 
 type LogFilter = 'ALL' | 'RESISTED' | 'RELAPSE';
+type RecoveryPromptType = 'RESISTED' | 'RELAPSE' | null;
 
 const MILESTONE_MESSAGES: Record<number, string> = {
   7: 'One week strong! Keep going.',
@@ -121,6 +122,7 @@ export default function BadHabitDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [showRelapse, setShowRelapse] = useState(false);
   const [logFilter, setLogFilter] = useState<LogFilter>('ALL');
+  const [recoveryPromptType, setRecoveryPromptType] = useState<RecoveryPromptType>(null);
   const [showAllLogs, setShowAllLogs] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
@@ -155,9 +157,10 @@ export default function BadHabitDetailScreen() {
       resetCounter: false,
     });
     await loadData();
+    setRecoveryPromptType('RESISTED');
   };
 
-  if (loading || !habit) {
+  if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
@@ -169,6 +172,26 @@ export default function BadHabitDetailScreen() {
         </View>
         <View style={styles.loadingContainer}>
           <Text style={{ ...Typography.Body1, color: Colors.TextSecondary }}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!habit) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable onPress={() => safeBack(router, '/(tabs)/track/bad-habits')} style={styles.headerBtn}>
+            <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Not found</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={{ ...Typography.Headline2, color: Colors.TextPrimary }}>Recovery track not found</Text>
+          <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, marginTop: Spacing.sm, textAlign: 'center' }}>
+            This entry may have been deleted or is no longer available on this device.
+          </Text>
         </View>
       </View>
     );
@@ -234,7 +257,10 @@ export default function BadHabitDetailScreen() {
         visible={showRelapse}
         onClose={() => setShowRelapse(false)}
         badHabitId={habit.id}
-        onLogged={loadData}
+        onLogged={async () => {
+          await loadData();
+          setRecoveryPromptType('RELAPSE');
+        }}
       />
 
       <View style={styles.header}>
@@ -300,6 +326,50 @@ export default function BadHabitDetailScreen() {
             <Text style={styles.statLabel}>Total Clean</Text>
           </View>
         </View>
+
+        {recoveryPromptType && (
+          <Card style={styles.recoverySupportCard}>
+            <View style={styles.recoverySupportHeader}>
+              <View
+                style={[
+                  styles.recoverySupportIcon,
+                  {
+                    backgroundColor:
+                      recoveryPromptType === 'RESISTED'
+                        ? Colors.Success + '18'
+                        : Colors.Warning + '18',
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={recoveryPromptType === 'RESISTED' ? 'shield-checkmark-outline' : 'compass-outline'}
+                  size={18}
+                  color={recoveryPromptType === 'RESISTED' ? Colors.Success : Colors.Warning}
+                />
+              </View>
+              <View style={styles.recoverySupportCopy}>
+                <Text style={styles.recoverySupportTitle}>
+                  {recoveryPromptType === 'RESISTED'
+                    ? 'Log what helped'
+                    : 'Reset gently'}
+                </Text>
+                <Text style={styles.recoverySupportText}>
+                  {recoveryPromptType === 'RESISTED'
+                    ? 'Capture the cue, place, or action that helped you resist so it is easier to repeat next time.'
+                    : 'Take one small next step: note the trigger, move away from the cue, and choose the next hour instead of judging the whole day.'}
+                </Text>
+              </View>
+              <Pressable onPress={() => setRecoveryPromptType(null)} hitSlop={10}>
+                <Ionicons name="close" size={18} color={Colors.TextSecondary} />
+              </Pressable>
+            </View>
+            <Text style={styles.recoverySupportNote}>
+              This tracker is private and local-only. If this habit feels unsafe
+              or hard to manage alone, consider reaching out to someone you trust
+              or a qualified support service.
+            </Text>
+          </Card>
+        )}
 
         {/* Milestone Card */}
         {milestoneMsg && (
@@ -733,6 +803,44 @@ const styles = StyleSheet.create({
     ...Typography.Caption,
     color: Colors.TextSecondary,
     marginTop: 2,
+  },
+  recoverySupportCard: {
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    borderColor: Colors.Warning + '35',
+  },
+  recoverySupportHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+  },
+  recoverySupportIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Shapes.IconBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  recoverySupportCopy: {
+    flex: 1,
+  },
+  recoverySupportTitle: {
+    ...Typography.Body1,
+    color: Colors.TextPrimary,
+    fontWeight: '700',
+  },
+  recoverySupportText: {
+    ...Typography.Body2,
+    color: Colors.TextSecondary,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  recoverySupportNote: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    lineHeight: 18,
+    marginTop: Spacing.sm,
   },
   milestoneCard: {
     borderRadius: Shapes.HeroCard,

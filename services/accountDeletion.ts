@@ -83,7 +83,14 @@ export async function deleteSignedInAccountAndData(): Promise<void> {
   await deleteHabitData(db, uid);
   await deleteCollectionDocs(db, `users/${uid}/goals`);
   await deleteCollectionDocs(db, `users/${uid}/activities`);
-  await deleteDoc(doc(db, `users/${uid}`));
+
+  try {
+    await deleteDoc(doc(db, `users/${uid}`));
+  } catch (error) {
+    // Profile doc may already be missing; do not block Auth + local wipe.
+    console.warn('Account deletion: profile document delete skipped or failed.', error);
+  }
+
   try {
     await deleteUser(user);
   } catch (error) {

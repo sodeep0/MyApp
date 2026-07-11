@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -21,6 +22,11 @@ import {
   Typography,
 } from "../../constants/theme";
 import { LoadingState } from "@/components/LoadingState";
+import { areNotificationsEnabledAsync } from "@/services/notifications";
+import {
+  getNotificationSettings,
+  type NotificationSettings,
+} from "@/stores/notificationStore";
 import { useDisplayName } from "../../hooks/useStore";
 import { navigateWithJournalAccess } from "../../services/journalGate";
 import {
@@ -31,11 +37,12 @@ import {
 import { getAllGoals } from "../../stores/goalStore";
 import {
   calculateStreak as calcStreak,
+  getAllCompletions,
   getAllHabits,
   getCompletionsForHabit,
-  getTodayCompletionsForHabit,
   markHabitComplete,
   unmarkHabitComplete,
+  todayStr,
 } from "../../stores/habitStore";
 import {
   type BadHabit,
@@ -296,7 +303,11 @@ export default function HomeScreen() {
   const [todayDone, setTodayDone] = useState<Set<string>>(new Set());
   const [streaks, setStreaks] = useState<Record<string, number>>({});
   const [relapsedBadHabitIds, setRelapsedBadHabitIds] = useState<Set<string>>(new Set());
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationSettings, setNotificationSettings] =
+    useState<NotificationSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -313,37 +324,49 @@ export default function HomeScreen() {
 
   const loadAllData = async () => {
     setLoading(true);
+    setLoadError(null);
 
     try {
-      const [habitsData, goalsData, badHabitsData, urgeEvents] = await Promise.all([
+      const [
+        habitsData,
+        goalsData,
+        badHabitsData,
+        urgeEvents,
+        settings,
+        remindersEnabled,
+      ] = await Promise.all([
         getAllHabits(),
         getAllGoals(),
         getAllBadHabits(),
         getAllUrgeEvents(),
+        getNotificationSettings(),
+        areNotificationsEnabledAsync(),
       ]);
 
       setHabits(habitsData);
       setGoals(goalsData);
       setBadHabits(badHabitsData);
+      setNotificationSettings(settings);
+      setNotificationsEnabled(remindersEnabled);
 
       const doneSet = new Set<string>();
       const streakMap: Record<string, number> = {};
+      const allCompletions = await getAllCompletions();
+      const today = todayStr();
 
-      await Promise.all(
-        habitsData.map(async (habit) => {
-          const done = await getTodayCompletionsForHabit(habit.id);
-          if (done.length > 0) doneSet.add(habit.id);
-
-          const completions = await getCompletionsForHabit(habit.id);
-          streakMap[habit.id] = calcStreak(
-            completions,
-            habit.frequency,
-            habit.weekDays,
-            habit.timesPerWeek,
-            habit.everyNDays,
-          );
-        }),
-      );
+      for (const habit of habitsData) {
+        const habitCompletions = allCompletions.filter((c) => c.habitId === habit.id);
+        if (habitCompletions.some((c) => c.completedDate === today)) {
+          doneSet.add(habit.id);
+        }
+        streakMap[habit.id] = calcStreak(
+          habitCompletions,
+          habit.frequency,
+          habit.weekDays,
+          habit.timesPerWeek,
+          habit.everyNDays,
+        );
+      }
 
       setTodayDone(doneSet);
       setStreaks(streakMap);
@@ -354,6 +377,9 @@ export default function HomeScreen() {
           .map((event) => event.badHabitId),
       );
       setRelapsedBadHabitIds(relapsedIds);
+    } catch (error) {
+      console.warn("Home failed to load.", error);
+      setLoadError("Could not load today's data. Pull back to this tab or try again.");
     } finally {
       setLoading(false);
     }
@@ -370,6 +396,20 @@ export default function HomeScreen() {
     return values.length > 0 ? Math.max(...values) : 0;
   }, [streaks]);
   const displayNameStr = String(displayName).split(" ")[0] || "User";
+  const activeReminderTypes = useMemo(() => {
+    if (!notificationSettings) return 0;
+    return [
+      notificationSettings.habitRemindersEnabled,
+      notificationSettings.streakAlertsEnabled,
+      notificationSettings.goalDeadlineEnabled,
+      notificationSettings.weeklyReviewEnabled,
+    ].filter(Boolean).length;
+  }, [notificationSettings]);
+  const notificationSummary = notificationsEnabled
+    ? `${activeReminderTypes} reminder type${activeReminderTypes === 1 ? "" : "s"} active`
+    : notificationSettings?.enabled
+      ? "Device permission is off"
+      : "Reminders are paused";
 
   const dailyScore = useMemo(() => {
     const habitCompletion = totalHabits > 0 ? completedCount / totalHabits : 0;
@@ -401,34 +441,49 @@ export default function HomeScreen() {
   );
 
   const toggleComplete = async (habitId: string) => {
-    if (todayDone.has(habitId)) {
-      await unmarkHabitComplete(habitId);
-      setTodayDone((prev) => {
-        const next = new Set(prev);
-        next.delete(habitId);
-        return next;
-      });
-      return;
-    }
+    const wasDone = todayDone.has(habitId);
 
-    await markHabitComplete(habitId);
     setTodayDone((prev) => {
       const next = new Set(prev);
-      next.add(habitId);
+      if (wasDone) {
+        next.delete(habitId);
+      } else {
+        next.add(habitId);
+      }
       return next;
     });
 
-    const habit = habits.find((h) => h.id === habitId);
-    if (!habit) return;
-    const completions = await getCompletionsForHabit(habitId);
-    const streak = calcStreak(
-      completions,
-      habit.frequency,
-      habit.weekDays,
-      habit.timesPerWeek,
-      habit.everyNDays,
-    );
-    setStreaks((prev) => ({ ...prev, [habitId]: streak }));
+    try {
+      if (wasDone) {
+        await unmarkHabitComplete(habitId);
+      } else {
+        await markHabitComplete(habitId);
+        const habit = habits.find((h) => h.id === habitId);
+        if (habit) {
+          const completions = await getCompletionsForHabit(habitId);
+          const streak = calcStreak(
+            completions,
+            habit.frequency,
+            habit.weekDays,
+            habit.timesPerWeek,
+            habit.everyNDays,
+          );
+          setStreaks((prev) => ({ ...prev, [habitId]: streak }));
+        }
+      }
+    } catch (error) {
+      console.warn("Habit toggle failed.", error);
+      setTodayDone((prev) => {
+        const next = new Set(prev);
+        if (wasDone) {
+          next.add(habitId);
+        } else {
+          next.delete(habitId);
+        }
+        return next;
+      });
+      Alert.alert("Could not update habit", "Please try again in a moment.");
+    }
   };
 
   const handleQuickActionPress = (route: string) => {
@@ -482,6 +537,25 @@ export default function HomeScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: "center", paddingHorizontal: Spacing.screenH }]}>
+        <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, textAlign: "center", marginBottom: Spacing.md }}>
+          {loadError}
+        </Text>
+        <Pressable
+          onPress={() => void loadAllData()}
+          style={({ pressed }) => [
+            styles.retryBtn,
+            { opacity: pressed ? 0.85 : 1 },
+          ]}
+        >
+          <Text style={{ ...Typography.Body2, color: Colors.SteelBlue, fontWeight: "600" }}>Try again</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}> 
       <ScrollView
@@ -497,15 +571,31 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>{getGreeting(displayNameStr)} 👋</Text>
           </View>
 
-          <Pressable
-            onPress={() => router.push("/profile" as any)}
-            style={({ pressed }) => [
-              styles.avatar,
-              { transform: [{ scale: pressed ? 0.96 : 1 }] },
-            ]}
-          >
-            <Ionicons name="person" size={20} color={Colors.SteelBlue} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => router.push("/profile/notifications" as any)}
+              style={({ pressed }) => [
+                styles.notificationBell,
+                { transform: [{ scale: pressed ? 0.96 : 1 }] },
+              ]}
+            >
+              <Ionicons
+                name={notificationsEnabled ? "notifications" : "notifications-outline"}
+                size={20}
+                color={notificationsEnabled ? Colors.Success : Colors.SteelBlue}
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push("/profile" as any)}
+              style={({ pressed }) => [
+                styles.avatar,
+                { transform: [{ scale: pressed ? 0.96 : 1 }] },
+              ]}
+            >
+              <Ionicons name="person" size={20} color={Colors.SteelBlue} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.scoreCard}>
@@ -559,6 +649,36 @@ export default function HomeScreen() {
             </Pressable>
           ))}
         </View>
+
+        <Pressable
+          onPress={() => router.push("/profile/notifications" as any)}
+          style={({ pressed }) => [
+            styles.reminderCard,
+            { transform: [{ scale: pressed ? 0.99 : 1 }] },
+          ]}
+        >
+          <View
+            style={[
+              styles.reminderIconWrap,
+              {
+                backgroundColor: notificationsEnabled
+                  ? Colors.Success + "18"
+                  : Colors.WarmSand,
+              },
+            ]}
+          >
+            <Ionicons
+              name={notificationsEnabled ? "notifications" : "notifications-off-outline"}
+              size={20}
+              color={notificationsEnabled ? Colors.Success : Colors.TextSecondary}
+            />
+          </View>
+          <View style={styles.reminderCopy}>
+            <Text style={styles.reminderTitle}>Reminders</Text>
+            <Text style={styles.reminderMeta}>{notificationSummary}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={Colors.TextSecondary} />
+        </Pressable>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -748,6 +868,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.Background,
   },
+  retryBtn: {
+    alignSelf: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: 16,
+    backgroundColor: Colors.SurfaceContainerLow,
+  },
   scrollContent: {
     paddingHorizontal: Spacing.screenH,
     paddingTop: Spacing.md,
@@ -762,6 +889,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: Spacing.md,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
   dateText: {
     ...Typography.Caption,
     color: Colors.TextSecondary,
@@ -772,6 +904,16 @@ const styles = StyleSheet.create({
     ...Typography.Headline1,
     color: Colors.TextPrimary,
     marginTop: 4,
+  },
+  notificationBell: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: Colors.SteelBlue,
+    backgroundColor: Colors.SoftSky + "30",
+    justifyContent: "center",
+    alignItems: "center",
   },
   avatar: {
     width: 44,
@@ -878,6 +1020,39 @@ const styles = StyleSheet.create({
     color: Colors.TextPrimary,
     fontWeight: "700" as const,
     letterSpacing: 0.3,
+  },
+  reminderCard: {
+    minHeight: 68,
+    borderRadius: Shapes.Card,
+    borderWidth: 1,
+    borderColor: Colors.BorderSubtle,
+    backgroundColor: Colors.Surface,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    ...Shadows.Card,
+  },
+  reminderIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: Shapes.IconBg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reminderCopy: {
+    flex: 1,
+  },
+  reminderTitle: {
+    ...Typography.Body1,
+    color: Colors.TextPrimary,
+    fontWeight: "700" as const,
+  },
+  reminderMeta: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    marginTop: 2,
   },
   section: {
     marginTop: Spacing.sm,

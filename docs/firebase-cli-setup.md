@@ -49,8 +49,17 @@ npm run firebase:indexes:deploy
 - Confirm correct Firebase project is selected: `firebase use`
 - Ensure rules are owner-only and deny unauthenticated requests
 - Verify local-only modules (journal, bad habits) are not in Firestore schema
+- Keep `google-services.json` / `GoogleService-Info.plist` out of git (see `google-services.json.example`)
+- Restrict the Android/iOS API keys in Google Cloud Console to your app package + SHA-1
+- Prefer Firebase App Check in production (see README Environment section)
 
-## 6) Common commands
+## 6) Native Firebase config files
+
+Copy `google-services.json.example` to `google-services.json` locally (Android), or inject the real file via EAS secrets / build hooks. Do not commit the real file.
+
+For iOS, place `GoogleService-Info.plist` locally the same way (also gitignored).
+
+## 7) Common commands
 
 ```bash
 firebase projects:list

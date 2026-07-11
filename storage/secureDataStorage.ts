@@ -66,45 +66,47 @@ function normalizeRecoveryState(
 }
 
 function createRandomKey(): string {
-  const weakRandom = new Uint8Array(ENCRYPTION_KEY_BYTES);
-  for (let i = 0; i < weakRandom.length; i += 1) {
-    weakRandom[i] = Math.floor(Math.random() * 256);
-  }
-
   try {
     return bytesToHex(Crypto.getRandomBytes(ENCRYPTION_KEY_BYTES));
   } catch (error) {
-    console.warn('Secure random key generation failed. Falling back to Math.random.', error);
-    return bytesToHex(weakRandom);
+    throw new Error(
+      'Secure random key generation failed. Sensitive local data cannot be encrypted safely.',
+      { cause: error },
+    );
   }
 }
 
 async function readKeyFromSecureStore(): Promise<string | null> {
   if (Platform.OS === 'web') {
-    return storage.getItem<string>(ENCRYPTION_KEY_FALLBACK, null);
+    throw new Error(
+      'Encrypted sensitive storage is not supported on web. Use iOS/Android with SecureStore.',
+    );
   }
 
   try {
-    const key = await SecureStore.getItemAsync(ENCRYPTION_KEY_ALIAS, secureStoreOptions);
-    if (key) return key;
+    return await SecureStore.getItemAsync(ENCRYPTION_KEY_ALIAS, secureStoreOptions);
   } catch (error) {
-    console.warn('SecureStore key read failed. Trying fallback key storage.', error);
+    throw new Error(
+      'SecureStore key read failed. Sensitive local data is unavailable until SecureStore works.',
+      { cause: error },
+    );
   }
-
-  return storage.getItem<string>(SECURE_STORE_FALLBACK_KEY, null);
 }
 
 async function writeKeyToSecureStore(key: string): Promise<void> {
   if (Platform.OS === 'web') {
-    await storage.setItem(ENCRYPTION_KEY_FALLBACK, key);
-    return;
+    throw new Error(
+      'Encrypted sensitive storage is not supported on web. Use iOS/Android with SecureStore.',
+    );
   }
 
   try {
     await SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key, secureStoreOptions);
   } catch (error) {
-    console.warn('SecureStore key write failed. Falling back to local storage.', error);
-    await storage.setItem(SECURE_STORE_FALLBACK_KEY, key);
+    throw new Error(
+      'SecureStore key write failed. Refusing to store encryption keys in AsyncStorage.',
+      { cause: error },
+    );
   }
 }
 
@@ -154,14 +156,6 @@ async function clearSensitiveDataCorruption(secureKey: string): Promise<void> {
   });
 }
 
-function createFallbackIv(): Uint8Array {
-  const fallback = new Uint8Array(16);
-  for (let i = 0; i < fallback.length; i += 1) {
-    fallback[i] = Math.floor(Math.random() * 256);
-  }
-  return fallback;
-}
-
 export async function getSensitiveDataRecoveryState(): Promise<{
   hasRecoverableError: boolean;
   corruptedKeys: string[];
@@ -187,17 +181,16 @@ export async function resetSensitiveDataStorage(): Promise<void> {
 
   await clearSensitiveDataRecoveryState();
 
-  if (Platform.OS === 'web') {
-    await storage.removeItem(ENCRYPTION_KEY_FALLBACK);
-  } else {
+  if (Platform.OS !== 'web') {
     try {
       await SecureStore.deleteItemAsync(ENCRYPTION_KEY_ALIAS, secureStoreOptions);
     } catch (error) {
       console.warn('SecureStore key delete failed during sensitive reset.', error);
     }
-    await storage.removeItem(SECURE_STORE_FALLBACK_KEY);
-    await storage.removeItem(ENCRYPTION_KEY_FALLBACK);
   }
+
+  await storage.removeItem(SECURE_STORE_FALLBACK_KEY);
+  await storage.removeItem(ENCRYPTION_KEY_FALLBACK);
 
   keyPromise = null;
 }
@@ -208,11 +201,14 @@ export async function setSensitiveItem<T>({
   value,
 }: SetSensitiveItemOptions<T>): Promise<void> {
   const key = await getOrCreateEncryptionKey();
-  let ivBytes: Uint8Array = createFallbackIv();
+  let ivBytes: Uint8Array;
   try {
     ivBytes = Crypto.getRandomBytes(16) as Uint8Array;
   } catch (error) {
-    console.warn('Secure IV generation failed. Falling back to Math.random.', error);
+    throw new Error(
+      'Secure IV generation failed. Sensitive local data cannot be encrypted safely.',
+      { cause: error },
+    );
   }
 
   const payload = encryptEnvelope(value, key, ivBytes);

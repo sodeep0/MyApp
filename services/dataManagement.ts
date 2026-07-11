@@ -13,7 +13,6 @@ const ONBOARDING_KEY = 'kaarma_onboarding_completed';
 const NOTIFICATION_SETTINGS_KEY = 'kaarma_notification_settings_v1';
 const SECURITY_SETTINGS_KEY = 'kaarma_security_settings_v1';
 const USER_EMAIL_KEY = 'kaarma_user_email';
-const LOGGED_IN_KEY = 'kaarma_logged_in';
 
 type ResetStep = {
   name: string;
@@ -46,7 +45,6 @@ export async function resetLocalAppData(): Promise<void> {
     { name: 'notification settings', run: () => storage.removeItem(NOTIFICATION_SETTINGS_KEY) },
     { name: 'security settings', run: () => storage.removeItem(SECURITY_SETTINGS_KEY) },
     { name: 'user email', run: () => storage.removeItem(USER_EMAIL_KEY) },
-    { name: 'logged-in flag', run: () => storage.removeItem(LOGGED_IN_KEY) },
   ];
 
   const results = await Promise.allSettled(resetSteps.map((step) => step.run()));

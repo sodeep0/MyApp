@@ -195,7 +195,7 @@ export default function BadHabitListScreen() {
         <View style={styles.privacyBanner}>
           <Ionicons name="lock-closed" size={14} color={Colors.TextSecondary} />
           <Text style={styles.privacyText}>
-            Your data is stored locally and never synced or shared. Local encryption is planned next.
+            Your data stays on this device with local encryption and is never synced or shared.
           </Text>
         </View>
       </ScrollView>

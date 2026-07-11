@@ -1,7 +1,5 @@
 import type { Goal } from '../types/models';
-import { GoalStatus } from '../types/models';
 import { getGoalRepository } from '@/repositories/factory';
-import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
 import { syncManagedNotificationsAsync } from '@/services/notifications';
 
 function repo() {
@@ -29,26 +27,12 @@ export async function saveGoals(goals: Goal[]): Promise<void> {
 }
 
 export async function addGoal(data: Omit<Goal, 'id' | 'createdAt' | 'completedAt'>): Promise<Goal> {
-  await enforceCountLimitedFeatureGate('activeGoals', () => repo().getActiveGoalCount(), {
-    enabled: data.status === GoalStatus.ACTIVE,
-  });
   const goal = await repo().addGoal(data);
   await syncNotificationsAfterGoalChange();
   return goal;
 }
 
 export async function updateGoal(id: string, updates: Partial<Goal>): Promise<Goal | null> {
-  const existingGoal = await repo().getGoalById(id);
-  const nextStatus = updates.status ?? existingGoal?.status;
-  const isBecomingActive =
-    existingGoal !== undefined &&
-    existingGoal.status !== GoalStatus.ACTIVE &&
-    nextStatus === GoalStatus.ACTIVE;
-
-  await enforceCountLimitedFeatureGate('activeGoals', () => repo().getActiveGoalCount(), {
-    enabled: isBecomingActive,
-  });
-
   const goal = await repo().updateGoal(id, updates);
   await syncNotificationsAfterGoalChange();
   return goal;

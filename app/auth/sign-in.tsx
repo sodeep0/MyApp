@@ -23,11 +23,12 @@ import {
   extractGoogleIdToken,
   useGoogleAuthRequest,
 } from "@/hooks/useGoogleAuthRequest";
+import { useAuthSession } from "@/hooks/useAuthSession";
 import {
   signInWithEmailPassword,
   signInWithGoogleIdToken,
 } from "@/services/firebase/auth";
-import { storage } from "@/storage/asyncStorage";
+import { persistSignedInIdentity } from "@/stores/userStore";
 
 function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -66,6 +67,13 @@ export default function SignInScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const { response, promptGoogleAuth, hasGoogleConfig } = useGoogleAuthRequest();
+  const { isAuthenticated, loading: authLoading } = useAuthSession();
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace("/(tabs)" as any);
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   useEffect(() => {
     const completeSignIn = async () => {
@@ -82,13 +90,12 @@ export default function SignInScreen() {
 
         const user = await signInWithGoogleIdToken(idToken);
 
-        await storage.setItem("kaarma_user_email", user.email ?? "");
-        await storage.setItem(
-          "kaarma_display_name",
-          user.displayName || user.email?.split("@")[0] || "User",
-        );
+        await persistSignedInIdentity({
+          email: user.email ?? "",
+          displayName: user.displayName || user.email?.split("@")[0] || "User",
+        });
 
-        router.replace("/profile" as any);
+        router.replace("/(tabs)" as any);
       } catch {
         setError("Google sign-in failed.");
       } finally {
@@ -135,13 +142,12 @@ export default function SignInScreen() {
     try {
       const user = await signInWithEmailPassword(normalizedEmail, password);
 
-      await storage.setItem("kaarma_user_email", user.email ?? normalizedEmail);
-      await storage.setItem(
-        "kaarma_display_name",
-        user.displayName || user.email?.split("@")[0] || "User",
-      );
+      await persistSignedInIdentity({
+        email: user.email ?? normalizedEmail,
+        displayName: user.displayName || user.email?.split("@")[0] || "User",
+      });
 
-      router.replace("/profile" as any);
+      router.replace("/(tabs)" as any);
     } catch (nextError) {
       setError(getSignInErrorMessage(nextError));
     } finally {

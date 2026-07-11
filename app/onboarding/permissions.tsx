@@ -3,6 +3,10 @@ import {
   disableNotificationsAsync,
   enableNotificationsAsync,
 } from '@/services/notifications';
+import {
+  hasScreenTimePermission,
+  requestScreenTimePermission,
+} from '@/services/screenTimeService';
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -100,29 +104,31 @@ export default function PermissionsScreen() {
     }
   };
 
-  const requestScreenTimePermission = async () => {
-    // Screen time permission uses Android UsageStatsManager
-    // This requires a native module or expo-dev-client build
-    if (Platform.OS === 'android') {
+  const requestScreenTimePermissionFlow = async () => {
+    if (Platform.OS !== 'android') {
       Alert.alert(
-        'Enable Screen Time Access',
-        'This will open Android Settings to grant Usage Access permission. Your data stays private.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Open Settings',
-            onPress: () => {
-              // When native module is installed:
-              // const granted = await openUsageSettings();
-              // setStatsGranted(!!granted);
-              setStatsGranted(true);
-            },
-          },
-        ]
+        'Screen Time on this platform',
+        'Full usage-stats access is Android-first in Kaarma. You can continue without enabling it here.',
       );
-    } else {
-      // iOS doesn't allow app-level screen time access
-      setStatsGranted(true);
+      return;
+    }
+
+    try {
+      await requestScreenTimePermission();
+      const granted = await hasScreenTimePermission();
+      setStatsGranted(granted);
+      if (!granted) {
+        Alert.alert(
+          'Permission not granted yet',
+          'Open Android Settings → Apps → Special app access → Usage access, enable Kaarma, then return here.',
+        );
+      }
+    } catch (error) {
+      console.warn('Screen time permission request failed.', error);
+      Alert.alert(
+        'Could not open Usage Access',
+        'Use a development build with usage-stats support, then enable Usage access in Android Settings.',
+      );
     }
   };
 
@@ -161,7 +167,7 @@ export default function PermissionsScreen() {
           icon="phone-portrait-outline"
           title="Screen Time Access"
           description="See which apps you use and for how long, with local app limits and focus-session planning."
-          onAllow={requestScreenTimePermission}
+          onAllow={requestScreenTimePermissionFlow}
           onSkip={() => setStatsGranted(true)}
           granted={statsGranted}
         />

@@ -27,7 +27,7 @@ import {
   GoalStatus,
   type Milestone,
 } from '@/types/models';
-import { generateUUID } from '@/stores/baseStore';
+import { generateUUID } from '@/utils/id';
 
 function getDateString() {
   return new Date().toLocaleDateString('en-US', {

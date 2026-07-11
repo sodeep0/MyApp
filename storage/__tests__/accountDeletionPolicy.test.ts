@@ -16,6 +16,22 @@ function importStatements(source: string): string {
     .join('\n');
 }
 
+test('firestore rules allow owner profile delete for account deletion', () => {
+  const rules = readProjectFile('firestore.rules');
+
+  assert.match(rules, /match \/users\/\{uid\}/);
+  assert.match(rules, /allow delete: if isOwner\(uid\);/);
+  assert.doesNotMatch(rules, /allow delete: if false;/);
+});
+
+test('account deletion continues when profile document delete fails', () => {
+  const source = readProjectFile('services/accountDeletion.ts');
+
+  assert.match(source, /profile document delete skipped or failed/);
+  assert.match(source, /deleteUser\(user\)/);
+  assert.match(source, /resetLocalAppData\(\)/);
+});
+
 test('account deletion service deletes only cloud-eligible Firestore paths before local reset', () => {
   const source = readProjectFile('services/accountDeletion.ts');
 

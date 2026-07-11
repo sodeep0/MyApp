@@ -1,7 +1,7 @@
 // Bad habit & urge event store (local-only by policy; never sync to Firebase)
 import type { BadHabit, UrgeEvent } from '../types/models';
 import { normalizeBadHabits, normalizeUrgeEvents } from './badHabitEntryNormalization';
-import { generateUUID } from './baseStore';
+import { generateUUID } from '@/utils/id';
 import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
 import { getSensitiveItem, setSensitiveItem } from '@/storage/secureDataStorage';
 export {

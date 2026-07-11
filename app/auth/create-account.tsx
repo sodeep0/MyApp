@@ -23,11 +23,12 @@ import {
   extractGoogleIdToken,
   useGoogleAuthRequest,
 } from "@/hooks/useGoogleAuthRequest";
+import { useAuthSession } from "@/hooks/useAuthSession";
 import {
   createAccountWithEmailPassword,
   signInWithGoogleIdToken,
 } from "@/services/firebase/auth";
-import { storage } from "@/storage/asyncStorage";
+import { persistSignedInIdentity } from "@/stores/userStore";
 
 function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -42,7 +43,7 @@ function getCreateAccountErrorMessage(error: unknown): string {
     case "auth/email-already-in-use":
       return "That email is already in use.";
     case "auth/weak-password":
-      return "Use a stronger password (at least 6 characters).";
+      return "Use a stronger password (at least 8 characters).";
     case "auth/operation-not-allowed":
       return "Email/password sign-up is not enabled yet.";
     case "auth/network-request-failed":
@@ -64,6 +65,13 @@ export default function CreateAccountScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const { response, promptGoogleAuth, hasGoogleConfig } = useGoogleAuthRequest();
+  const { isAuthenticated, loading: authLoading } = useAuthSession();
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace("/(tabs)" as any);
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   useEffect(() => {
     const completeSignUp = async () => {
@@ -80,13 +88,12 @@ export default function CreateAccountScreen() {
 
         const user = await signInWithGoogleIdToken(idToken);
 
-        await storage.setItem("kaarma_user_email", user.email ?? "");
-        await storage.setItem(
-          "kaarma_display_name",
-          user.displayName || user.email?.split("@")[0] || "User",
-        );
+        await persistSignedInIdentity({
+          email: user.email ?? "",
+          displayName: user.displayName || user.email?.split("@")[0] || "User",
+        });
 
-        router.replace("/profile" as any);
+        router.replace("/(tabs)" as any);
       } catch {
         setError("Google sign-up failed.");
       } finally {
@@ -123,8 +130,8 @@ export default function CreateAccountScreen() {
       return;
     }
 
-    if (password.length < 6) {
-      setError("Use at least 6 characters for your password.");
+    if (password.length < 8) {
+      setError("Use at least 8 characters for your password.");
       return;
     }
 
@@ -143,13 +150,13 @@ export default function CreateAccountScreen() {
         trimmedName || undefined,
       );
 
-      await storage.setItem("kaarma_user_email", user.email ?? normalizedEmail);
-      await storage.setItem(
-        "kaarma_display_name",
-        user.displayName || trimmedName || user.email?.split("@")[0] || "User",
-      );
+      await persistSignedInIdentity({
+        email: user.email ?? normalizedEmail,
+        displayName:
+          user.displayName || trimmedName || user.email?.split("@")[0] || "User",
+      });
 
-      router.replace("/profile" as any);
+      router.replace("/(tabs)" as any);
     } catch (nextError) {
       setError(getCreateAccountErrorMessage(nextError));
     } finally {

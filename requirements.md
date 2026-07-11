@@ -1,6 +1,6 @@
 # Kaarma - Product Requirements
 
-> Last updated: 2026-04-26
+> Last updated: 2026-05-18
 > Scope: realistic product requirements for the current codebase and near-term MVP
 
 For verified implementation status, use `progress.md`. This file defines product expectations and intended near-term scope.
@@ -108,7 +108,7 @@ Current expectation:
 - profile editing exists
 - guest profile exposes privacy/security, data export, and local-device reset controls for local-first data management
 - profile now includes a dedicated notifications settings screen for reminder toggles and weekly review time
-- auth state follows Firebase session behavior in the main profile/auth flows, with broader session centralization still pending
+- auth state follows Firebase session behavior in the main profile/auth flows, and profile waits for auth loading before showing guest or signed-in settings; broader session centralization still pending
 
 ### 6.3 Habits
 
@@ -175,6 +175,7 @@ Current expectation:
 
 - list, detail, add/edit, and relapse flows exist
 - recovery metrics exist in store logic
+- resisted-urge and relapse logging now show small local-only support prompts with practical next steps
 - module is local-only
 - encrypted local persistence is implemented for bad-habit and urge-event records
 
@@ -206,8 +207,8 @@ Current expectation:
 - dashboard UI is implemented
 - Android usage stats service exists
 - unsupported environments can still render a demo/fallback UI
-- app-limits management now exists with per-app set/clear daily limits persisted in `screenTimeService`
-- focus sessions now persist locally with selected duration, remaining-time recovery after reload, manual ending, automatic expiry cleanup, and persisted blocked-app selections
+- app-limits management now exists with per-app set/clear daily awareness limits persisted in `screenTimeService`
+- focus sessions now persist locally with selected duration, remaining-time recovery after reload, manual ending, automatic expiry cleanup, and persisted focus-plan app selections
 - scheduling and native app blocking are still not finished
 
 ### 6.9 Premium

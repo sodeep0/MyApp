@@ -1,6 +1,6 @@
 import { storage } from '@/storage/asyncStorage';
 import type { ActivityLog } from '@/types/models';
-import { generateUUID } from '@/stores/baseStore';
+import { generateUUID } from '@/utils/id';
 import type { ActivityRepository } from '@/repositories/interfaces/activityRepository';
 import { normalizeActivities } from '@/repositories/activityNormalization';
 import {

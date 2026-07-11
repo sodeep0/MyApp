@@ -15,12 +15,11 @@ import { useSubscription } from '@/hooks/useSubscription';
 
 const PREMIUM_FEATURES = [
   { icon: 'time-outline', text: 'Unlimited habit history' },
-  { icon: 'shield-checkmark-outline', text: 'Expanded streak insights' },
   { icon: 'documents-outline', text: 'Unlimited journal entries' },
   { icon: 'flag-outline', text: 'Unlimited active goals' },
+  { icon: 'ban-outline', text: 'More bad-habit recovery tracks' },
   { icon: 'phone-portrait-outline', text: 'Focus sessions and blocked-app planning' },
   { icon: 'calendar-outline', text: 'Screen-time planning tools when available' },
-  { icon: 'cloud-upload-outline', text: 'Cloud-eligible sync foundations and data export' },
 ];
 
 const PLANS = [

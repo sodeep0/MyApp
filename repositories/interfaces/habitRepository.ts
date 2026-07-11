@@ -8,6 +8,7 @@ export interface HabitRepository {
   updateHabit(id: string, updates: Partial<Habit>): Promise<Habit | null>;
   deleteHabit(id: string): Promise<void>;
   getCompletionsForHabit(habitId: string): Promise<HabitCompletion[]>;
+  getAllCompletions(): Promise<HabitCompletion[]>;
   getTodayCompletionsForHabit(habitId: string): Promise<HabitCompletion[]>;
   saveCompletions(completions: HabitCompletion[]): Promise<void>;
   markHabitComplete(habitId: string): Promise<HabitCompletion>;

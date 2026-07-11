@@ -36,7 +36,7 @@ interface RelapseSheetProps {
   visible: boolean;
   onClose: () => void;
   badHabitId: string;
-  onLogged: () => void;
+  onLogged: (eventType: UrgeEventType) => void | Promise<void>;
 }
 
 export default function RelapseSheet({ visible, onClose, badHabitId, onLogged }: RelapseSheetProps) {
@@ -75,7 +75,7 @@ export default function RelapseSheet({ visible, onClose, badHabitId, onLogged }:
       setSelectedTriggers([]);
       setCustomTrigger('');
       setResetCounter(true);
-      onLogged();
+      await onLogged('RELAPSE' as UrgeEventType);
       onClose();
     } catch {
       Alert.alert('Error', 'Could not log relapse. Please try again.');

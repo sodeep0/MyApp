@@ -39,8 +39,9 @@ export const Colors = {
   OverlayMedium: 'rgba(26,26,46,0.6)',
 } as const;
 
-// ─── Dark Mode Colors ──────────────────────────────────────────────────────
+// ─── Dark Mode Colors (deferred — unused until dark theme ships) ─────────────
 
+/** @deprecated Not wired to the app yet. Prefer Colors until dark mode is implemented. */
 export const DarkColors = {
   Background: '#0F0F1A',
   Surface: '#1C1C2E',

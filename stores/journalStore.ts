@@ -1,6 +1,6 @@
 // Journal entry store (local-only by policy; never sync to Firebase)
 import type { JournalEntry } from '../types/models';
-import { generateUUID } from './baseStore';
+import { generateUUID } from '@/utils/id';
 import { normalizeJournalEntries } from './journalEntryNormalization';
 import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
 import { getSensitiveItem, setSensitiveItem } from '@/storage/secureDataStorage';

@@ -1,7 +1,7 @@
+import { LoadingState } from "@/components/LoadingState";
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
-import { View } from "react-native";
-import { isOnboardingCompleted } from "../stores/userStore";
+import { isOnboardingCompleted } from "@/stores/userStore";
 
 export default function Index() {
   const [route, setRoute] = useState<string | null>(null);
@@ -14,9 +14,15 @@ export default function Index() {
     init();
   }, []);
 
-  // ✅ Only this screen shows nothing while loading
-  // Stack is still mounted above — deep links still work
-  if (!route) return <View style={{ flex: 1 }} />;
+  if (!route) {
+    return (
+      <LoadingState
+        fullScreen
+        title="Starting Kaarma"
+        message="Checking your onboarding status."
+      />
+    );
+  }
 
   return <Redirect href={route as any} />;
 }

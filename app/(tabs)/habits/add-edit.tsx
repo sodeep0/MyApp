@@ -179,7 +179,11 @@ export default function AddEditHabitScreen() {
   }, [id, isEditing]);
 
   const handleSave = async () => {
-    if (!name.trim() || isSaving || isLoading) return;
+    if (isSaving || isLoading) return;
+    if (!name.trim()) {
+      Alert.alert('Name required', 'Enter a habit name before saving.');
+      return;
+    }
 
     setIsSaving(true);
 

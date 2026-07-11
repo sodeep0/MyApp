@@ -50,6 +50,9 @@ function ButtonComponent({
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       style={({ pressed }) => [
         styles.container,
         { backgroundColor: VARIANT_COLORS[variant].bg },
@@ -106,6 +109,8 @@ function FABComponent({ icon, onPress, disabled = false }: FABProps) {
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel="Floating action button"
       style={({ pressed }) => [
         styles.fab,
         disabled && styles.disabled,

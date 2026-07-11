@@ -653,7 +653,7 @@ function ScreenTimeContent() {
           <View style={styles.focusBannerContent}>
             <Ionicons name="eye-off-outline" size={18} color={Colors.Surface} />
             <Text style={styles.focusBannerText}>
-              Focus Mode - {formatFocusRemaining(focusRemainingMs)} remaining
+              Focus session - {formatFocusRemaining(focusRemainingMs)} remaining
             </Text>
           </View>
           <Pressable onPress={endFocusMode} style={styles.focusBannerEnd}>
@@ -709,6 +709,18 @@ function ScreenTimeContent() {
               Week
             </Text>
           </Pressable>
+        </View>
+
+        <View style={styles.scopeNotice}>
+          <Ionicons
+            name="information-circle-outline"
+            size={18}
+            color={Colors.SteelBlue}
+          />
+          <Text style={styles.scopeNoticeText}>
+            Kaarma tracks usage, saves limits, and stores focus plans. Native app
+            blocking and schedules are not enforced yet.
+          </Text>
         </View>
 
         <View style={styles.heroCard}>
@@ -910,7 +922,7 @@ function ScreenTimeContent() {
                   </View>
                   {limitReached ? (
                     <View style={styles.limitBadge}>
-                      <Text style={styles.limitBadgeText}>Limit Reached</Text>
+                      <Text style={styles.limitBadgeText}>Limit Met</Text>
                     </View>
                   ) : timeLeftMinutes !== undefined && timeLeftMinutes > 0 ? (
                     <Text style={styles.timeRemaining}>
@@ -958,7 +970,8 @@ function ScreenTimeContent() {
               <Text style={styles.focusTitle}>Set Focus Session</Text>
             </View>
             <Text style={styles.focusDescription}>
-              Plan a focused stretch and keep selected apps visible in your focus plan.
+              Plan a focused stretch with a timer. Selected apps are saved as
+              intentions; Kaarma does not block them yet.
             </Text>
             <View style={styles.focusButtonsRow}>
               {FOCUS_DURATIONS.map((duration) => (
@@ -988,6 +1001,10 @@ function ScreenTimeContent() {
           />
           <Text style={styles.sectionHeaderText}>Focus App Plan</Text>
         </View>
+        <Text style={styles.sectionHelperText}>
+          These toggles mark apps to avoid during focus sessions. They do not
+          prevent the apps from opening.
+        </Text>
         <View style={styles.blockedAppsContainer}>
           {topApps.slice(0, 6).map((app, index) => {
             const isBlocked = !!blockedApps[app.packageName];
@@ -1169,6 +1186,22 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   periodTextActive: { color: Colors.SteelBlue },
+  scopeNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.sm,
+    borderRadius: Shapes.Card,
+    borderWidth: 1,
+    borderColor: Colors.SteelBlue + "30",
+    backgroundColor: Colors.SoftSky + "22",
+    padding: Spacing.md,
+  },
+  scopeNoticeText: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    flex: 1,
+    lineHeight: 18,
+  },
   heroCard: {
     backgroundColor: Colors.Surface,
     borderRadius: Shapes.HeroCard,
@@ -1368,7 +1401,6 @@ const styles = StyleSheet.create({
   },
   appNameBlocked: {
     color: Colors.TextSecondary,
-    textDecorationLine: "line-through",
   },
   appTime: {
     ...Typography.Caption,
@@ -1470,6 +1502,11 @@ const styles = StyleSheet.create({
     ...Typography.SectionLabel,
     color: Colors.TextSecondary,
     textTransform: "uppercase",
+  },
+  sectionHelperText: {
+    ...Typography.Caption,
+    color: Colors.TextSecondary,
+    lineHeight: 18,
   },
   blockedAppsContainer: {
     backgroundColor: Colors.Surface,

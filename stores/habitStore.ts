@@ -77,6 +77,10 @@ export async function getCompletionsForHabit(habitId: string): Promise<HabitComp
   return repo().getCompletionsForHabit(habitId);
 }
 
+export async function getAllCompletions(): Promise<HabitCompletion[]> {
+  return repo().getAllCompletions();
+}
+
 export async function getVisibleCompletionsForHabit(habitId: string): Promise<HabitCompletion[]> {
   const [completions, isPremium] = await Promise.all([
     repo().getCompletionsForHabit(habitId),

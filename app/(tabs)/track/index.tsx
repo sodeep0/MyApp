@@ -96,9 +96,11 @@ export default function TrackHubScreen() {
   const insets = useSafeAreaInsets();
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadRecent = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
 
     try {
       const [urgeEvents, badHabits, activities, securitySettings] = await Promise.all([
@@ -160,6 +162,9 @@ export default function TrackHubScreen() {
         .slice(0, 3);
 
       setRecentItems(merged);
+    } catch (error) {
+      console.warn('Track hub failed to load.', error);
+      setLoadError('Could not load recent activity. Try again.');
     } finally {
       setLoading(false);
     }
@@ -197,6 +202,19 @@ export default function TrackHubScreen() {
         title="Loading Track"
         message="Pulling together your private tracking and recent activity."
       />
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', paddingHorizontal: Spacing.screenH }]}>
+        <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, textAlign: 'center', marginBottom: Spacing.md }}>
+          {loadError}
+        </Text>
+        <Pressable onPress={() => void loadRecent()} style={styles.retryBtn}>
+          <Text style={{ ...Typography.Body2, color: Colors.SteelBlue, fontWeight: '600' }}>Try again</Text>
+        </Pressable>
+      </View>
     );
   }
 
@@ -285,6 +303,13 @@ export default function TrackHubScreen() {
 const styles = StyleSheet.create({
   container: {
     ...CommonStyles.screenContainer,
+  },
+  retryBtn: {
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Shapes.Button,
+    backgroundColor: Colors.SurfaceContainerLow,
   },
   header: {
     ...CommonStyles.listHeader,

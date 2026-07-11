@@ -58,6 +58,9 @@ export default function IntentionsScreen() {
   };
 
   const handleContinue = async () => {
+    if (selected.length === 0) {
+      return;
+    }
     const intentions = selected as Intention[];
     await saveSelectedIntentions(intentions);
     router.push('/onboarding/permissions' as any);
@@ -120,6 +123,7 @@ export default function IntentionsScreen() {
           label="Continue"
           onPress={handleContinue}
           fullWidth
+          disabled={selected.length === 0}
         />
       </View>
     </View>

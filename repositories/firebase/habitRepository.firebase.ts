@@ -54,8 +54,8 @@ async function removeTodayCompletionInCloud(uid: string, db: Firestore, habitId:
 let isRefreshingHabits = false;
 
 function runInBackground(task: () => Promise<void>): void {
-  void task().catch(() => {
-    // Best effort only; local data is the source of truth for UX responsiveness.
+  void task().catch((error) => {
+    console.warn('Habits background sync task failed.', error);
   });
 }
 
@@ -256,6 +256,10 @@ export const habitFirebaseRepository: HabitRepository = {
 
   async getCompletionsForHabit(habitId) {
     return habitLocalRepository.getCompletionsForHabit(habitId);
+  },
+
+  async getAllCompletions() {
+    return habitLocalRepository.getAllCompletions();
   },
 
   async getTodayCompletionsForHabit(habitId) {

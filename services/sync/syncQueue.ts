@@ -1,10 +1,18 @@
 import { storage } from '@/storage/asyncStorage';
-import { generateUUID } from '@/stores/baseStore';
+import { generateUUID } from '@/utils/id';
 
 const SYNC_QUEUE_KEY = 'kaarma_sync_queue_v1';
+const SYNC_DROP_STATS_KEY = 'kaarma_sync_drop_stats_v1';
 const MAX_ATTEMPTS = 5;
 
 export type SyncModule = 'user' | 'habits' | 'goals' | 'activities';
+
+export type SyncDropStats = {
+  count: number;
+  lastDroppedAt: string | null;
+  lastModule: SyncModule | null;
+  lastAction: string | null;
+};
 
 export class PermanentSyncItemError extends Error {
   constructor(message: string) {
@@ -90,6 +98,30 @@ async function saveQueue(items: SyncQueueItem[]): Promise<void> {
   await storage.setItem(SYNC_QUEUE_KEY, items);
 }
 
+export async function getSyncDropStats(): Promise<SyncDropStats> {
+  const stored = await storage.getItem<Partial<SyncDropStats> | null>(SYNC_DROP_STATS_KEY, null);
+  return {
+    count: typeof stored?.count === 'number' && Number.isFinite(stored.count) ? stored.count : 0,
+    lastDroppedAt: typeof stored?.lastDroppedAt === 'string' ? stored.lastDroppedAt : null,
+    lastModule: isSyncModule(stored?.lastModule) ? stored.lastModule : null,
+    lastAction: typeof stored?.lastAction === 'string' ? stored.lastAction : null,
+  };
+}
+
+async function recordSyncDrop(item: SyncQueueItem, reason: string): Promise<void> {
+  const previous = await getSyncDropStats();
+  const next: SyncDropStats = {
+    count: previous.count + 1,
+    lastDroppedAt: new Date().toISOString(),
+    lastModule: item.module,
+    lastAction: item.action,
+  };
+  await storage.setItem(SYNC_DROP_STATS_KEY, next);
+  console.warn(
+    `[sync] dropped ${item.module}:${item.action} (${reason}). totalDrops=${next.count}`,
+  );
+}
+
 export async function clearSyncQueue(modules?: SyncModule[]): Promise<void> {
   if (!modules || modules.length === 0) {
     await storage.removeItem(SYNC_QUEUE_KEY);
@@ -143,11 +175,9 @@ export async function flushSyncQueue(
       const attempts = item.attempts + 1;
       const lastError = getSyncErrorMessage(error);
       if (isPermanentSyncItemError(error)) {
-        console.warn(`[sync] dropped invalid ${item.module}:${item.action}: ${lastError}`);
+        await recordSyncDrop(item, `invalid: ${lastError}`);
       } else if (attempts >= MAX_ATTEMPTS) {
-        console.warn(
-          `[sync] dropped ${item.module}:${item.action} after ${attempts} attempts: ${lastError}`,
-        );
+        await recordSyncDrop(item, `after ${attempts} attempts: ${lastError}`);
       } else {
         remaining.push({
           ...item,

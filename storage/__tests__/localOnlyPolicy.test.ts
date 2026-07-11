@@ -56,6 +56,19 @@ test('bad-habit creation enforces the shared free-tier gate before saving', () =
   assert.match(source, /return getAllBadHabits\(\)\.then\(\(habits\) => habits\.length\)/);
 });
 
+test('bad-habit recovery support stays in the local-only UI flow', () => {
+  const detailSource = readProjectFile('app/(tabs)/track/bad-habit-detail.tsx');
+  const relapseSource = readProjectFile('app/(tabs)/track/relapse-sheet.tsx');
+  const detailImports = importStatements(detailSource);
+  const relapseImports = importStatements(relapseSource);
+
+  assert.doesNotMatch(detailImports, /firebase/i);
+  assert.doesNotMatch(relapseImports, /firebase/i);
+  assert.match(detailSource, /recoveryPromptType/);
+  assert.match(detailSource, /This tracker is private and local-only/);
+  assert.match(relapseSource, /await onLogged\('RELAPSE' as UrgeEventType\)/);
+});
+
 test('repository factory exposes only cloud-eligible module repositories', () => {
   const source = readProjectFile('repositories/factory.ts');
 

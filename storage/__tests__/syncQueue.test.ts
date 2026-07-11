@@ -180,7 +180,7 @@ test('flushSyncQueue drops an item after the maximum retry attempt', async () =>
 
   assert.deepEqual(await readQueue(), []);
   assert.deepEqual(warnings, [
-    ['[sync] dropped user:update after 5 attempts: still offline'],
+    ['[sync] dropped user:update (after 5 attempts: still offline). totalDrops=1'],
   ]);
 });
 
@@ -203,7 +203,7 @@ test('flushSyncQueue drops permanent invalid items without retrying', async () =
 
   assert.deepEqual(await readQueue(), []);
   assert.deepEqual(warnings, [
-    ['[sync] dropped invalid goals:setGoal: queued goal payload is invalid'],
+    ['[sync] dropped goals:setGoal (invalid: queued goal payload is invalid). totalDrops=1'],
   ]);
 });
 

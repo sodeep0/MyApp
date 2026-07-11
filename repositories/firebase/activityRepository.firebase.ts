@@ -71,17 +71,41 @@ export async function flushActivityQueue(): Promise<void> {
   });
 }
 
+let isRefreshingActivities = false;
+
+function runInBackground(task: () => Promise<void>): void {
+  void task().catch((error) => {
+    console.warn('Activities background sync task failed.', error);
+  });
+}
+
+function refreshActivitiesFromCloudInBackground(): void {
+  if (isRefreshingActivities) return;
+  isRefreshingActivities = true;
+
+  runInBackground(async () => {
+    try {
+      const context = await getCloudContext();
+      if (!context) return;
+
+      await flushActivityQueue();
+      const q = query(collection(context.db, activitiesPath(context.uid)), orderBy('loggedAt', 'desc'));
+      const snap = await getDocs(q);
+      const entries = normalizeActivities(snap.docs.map((d) => d.data()));
+      await activityLocalRepository.saveActivities(entries);
+    } catch (error) {
+      console.warn('Activities cloud refresh failed; keeping local cache.', error);
+    } finally {
+      isRefreshingActivities = false;
+    }
+  });
+}
+
 export const activityFirebaseRepository: ActivityRepository = {
   async getAllActivities() {
-    const context = await getCloudContext();
-    if (!context) return activityLocalRepository.getAllActivities();
-
-    await flushActivityQueue();
-    const q = query(collection(context.db, activitiesPath(context.uid)), orderBy('loggedAt', 'desc'));
-    const snap = await getDocs(q);
-    const entries = normalizeActivities(snap.docs.map((d) => d.data()));
-    await activityLocalRepository.saveActivities(entries);
-    return entries;
+    const localEntries = await activityLocalRepository.getAllActivities();
+    refreshActivitiesFromCloudInBackground();
+    return localEntries;
   },
 
   async getActivityById(id) {

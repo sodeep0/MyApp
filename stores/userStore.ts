@@ -42,3 +42,25 @@ export async function getSelectedIntentions(): Promise<Intention[]> {
 export async function saveSelectedIntentions(intentions: Intention[]): Promise<void> {
   await repo().saveSelectedIntentions(intentions);
 }
+
+/**
+ * Persist identity fields after Firebase sign-in / sign-up through the user repository.
+ */
+export async function persistSignedInIdentity(input: {
+  email: string;
+  displayName: string;
+}): Promise<void> {
+  const displayName = input.displayName.trim() || input.email.split('@')[0] || 'User';
+  const email = input.email.trim();
+  const existing = await getUserProfile();
+
+  await updateDisplayName(displayName);
+  await saveUserProfile({
+    displayName,
+    email,
+    avatar: existing?.avatar ?? null,
+    bio: existing?.bio ?? '',
+    onboardingCompleted: existing?.onboardingCompleted ?? true,
+    selectedIntentions: existing?.selectedIntentions ?? [],
+  });
+}

@@ -32,15 +32,21 @@ export function useGoogleAuthRequest() {
       await GoogleSignin.hasPlayServices({
         showPlayServicesUpdateDialog: true,
       });
-      console.log("✅ Play services OK");
+      if (__DEV__) {
+        console.log("Play services OK");
+      }
 
       const signInResponse = await GoogleSignin.signIn();
-      console.log("✅ Sign in response type:", signInResponse.type);
+      if (__DEV__) {
+        console.log("Sign in response type:", signInResponse.type);
+      }
 
       if (signInResponse.type === "success") {
         const idToken = signInResponse.data.idToken;
         if (!idToken) {
-          console.log("❌ No idToken in sign-in response");
+          if (__DEV__) {
+            console.log("No idToken in sign-in response");
+          }
           setResponse({ type: "error", error: new Error("No idToken returned") });
           return;
         }
@@ -55,9 +61,9 @@ export function useGoogleAuthRequest() {
 
       setResponse({ type: signInResponse.type });
     } catch (error: any) {
-      console.log("❌ Error code:", error.code);
-      console.log("❌ Error message:", error.message);
-      console.log("❌ Full error:", JSON.stringify(error, null, 2));
+      if (__DEV__) {
+        console.log("Google auth error:", error?.code, error?.message);
+      }
       setResponse({ type: "error", error });
     }
   }, [webClientId]);

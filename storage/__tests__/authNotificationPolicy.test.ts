@@ -81,3 +81,13 @@ test('notification initialization registers managed response deep-link handling'
   assert.match(source, /router\.push\(route as any\)/);
   assert.match(source, /notificationResponseSubscription/);
 });
+
+test('home exposes notification status without creating a separate inbox', () => {
+  const source = readProjectFile('app/(tabs)/index.tsx');
+
+  assert.match(source, /areNotificationsEnabledAsync/);
+  assert.match(source, /getNotificationSettings/);
+  assert.match(source, /router\.push\("\/profile\/notifications" as any\)/);
+  assert.match(source, /Reminders/);
+  assert.doesNotMatch(source, /notification inbox/i);
+});

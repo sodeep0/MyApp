@@ -67,6 +67,7 @@ export default function RevealScreen() {
         <Text style={styles.title}>{"You're All Set!"}</Text>
         <Text style={styles.description}>
           Ready to transform your habits, track your screen time, and achieve your goals.
+          Your intention picks are saved for future personalization — all modules stay available for now.
         </Text>
 
         <View style={styles.features}>

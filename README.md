@@ -19,11 +19,13 @@ What works today:
 - Google sign-in and email/password auth with Firebase
 - habits, goals, journal, bad habits, and activity logging with persisted data
 - profile/settings shell
+- Home reminders card and notification shortcut
 - profile notifications settings with reminder toggles and weekly review time
 - Privacy & Security settings screen with journal-lock controls
 - premium upsell flow with mock subscription state
 - Android-first screen-time dashboard groundwork
 - Manage App Limits screen with persisted per-app daily limits
+- privacy-safe relapse/resisted-urge support prompts for bad-habit recovery
 - repository-based local/cloud architecture for profile, habits, goals, and activities
 - encrypted local persistence for sensitive local modules (journal, bad habits, urge events)
 
@@ -35,6 +37,7 @@ What is still incomplete:
 - account/cloud deletion native QA
 - release hardening and test coverage
 - full app blocking/scheduling behavior
+- manual MVP QA checklist items have not all been run yet
 
 ## Tech Stack
 
@@ -80,7 +83,17 @@ Sensitive modules should not be synced to Firebase.
 npm install
 ```
 
-2. Start the app
+2. Configure environment
+
+Copy [`.env.example`](./.env.example) to `.env` and fill in Firebase / Google Sign-In values. Without these, the app runs in local-only mode.
+
+For Android native builds, copy [`google-services.json.example`](./google-services.json.example) to `google-services.json` (gitignored) or inject it via EAS secrets. Restrict API keys in Google Cloud Console to your package name and signing certificate.
+
+Journal and bad-habit encryption require native SecureStore (iOS/Android). Web builds fail closed for those sensitive modules.
+
+Optional Firebase App Check: set `EXPO_PUBLIC_FIREBASE_APP_CHECK=true` and configure providers in the Firebase console (web also needs `EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY`).
+
+3. Start the app
 
 ```bash
 npm start
@@ -92,8 +105,9 @@ Useful commands:
 npm run android
 npm run ios
 npm run web
-npx tsc --noEmit
+npm run typecheck
 npm run lint
+npm test
 ```
 
 Firebase-related commands:
@@ -127,6 +141,7 @@ EAS build profiles are defined in `eas.json` for development, internal preview, 
 - [requirements.md](./requirements.md)
 - [flow-control.md](./flow-control.md)
 - [AGENTS.md](./AGENTS.md)
+- [docs/mvp-qa-checklist.md](./docs/mvp-qa-checklist.md)
 - [docs/data-policy.md](./docs/data-policy.md)
 - [docs/firestore-schema.md](./docs/firestore-schema.md)
 

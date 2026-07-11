@@ -1,7 +1,7 @@
 import type { Goal } from '@/types/models';
 import { GoalStatus } from '@/types/models';
 import { storage } from '@/storage/asyncStorage';
-import { generateUUID } from '@/stores/baseStore';
+import { generateUUID } from '@/utils/id';
 import type { GoalRepository } from '@/repositories/interfaces/goalRepository';
 import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
 import { normalizeGoals } from '@/repositories/goalNormalization';

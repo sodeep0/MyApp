@@ -10,6 +10,11 @@ import * as FirebaseAuth from "firebase/auth";
 import { Auth, Persistence, User, UserCredential } from "firebase/auth";
 import { Platform } from "react-native";
 import { getFirebaseApp } from "./app";
+import {
+  getFirebaseErrorCode,
+  resolveAuthUpgradeStrategy,
+  shouldFallbackToSignInAfterLinkFailure,
+} from "./authUpgradePolicy";
 
 let authInstance: Auth | null = null;
 let bootstrapPromise: Promise<User | null> | null = null;
@@ -36,7 +41,6 @@ async function clearSignedInUserSessionData(): Promise<void> {
       run: () => clearSyncQueue(["user", "habits", "goals", "activities"]),
     },
     { name: "user email", run: () => storage.removeItem("kaarma_user_email") },
-    { name: "logged-in flag", run: () => storage.removeItem("kaarma_logged_in") },
   ];
 
   const results = await Promise.allSettled(cleanupSteps.map((step) => step.run()));
@@ -132,6 +136,14 @@ export async function ensureAnonymousAuth(): Promise<User | null> {
   return bootstrapPromise;
 }
 
+async function applyDisplayName(user: User, displayName?: string): Promise<void> {
+  if (displayName?.trim()) {
+    await FirebaseAuth.updateProfile(user, {
+      displayName: displayName.trim(),
+    });
+  }
+}
+
 export async function signInWithEmailPassword(
   email: string,
   password: string,
@@ -139,6 +151,20 @@ export async function signInWithEmailPassword(
   const auth = getFirebaseAuth();
   if (!auth) {
     throw new Error("Firebase auth is not configured.");
+  }
+
+  const emailCredential = FirebaseAuth.EmailAuthProvider.credential(email, password);
+  const strategy = resolveAuthUpgradeStrategy(auth.currentUser?.isAnonymous);
+
+  if (strategy === "link" && auth.currentUser) {
+    try {
+      const linked = await FirebaseAuth.linkWithCredential(auth.currentUser, emailCredential);
+      return linked.user;
+    } catch (error) {
+      if (!shouldFallbackToSignInAfterLinkFailure(getFirebaseErrorCode(error))) {
+        throw error;
+      }
+    }
   }
 
   const credential = await FirebaseAuth.signInWithEmailAndPassword(
@@ -159,16 +185,27 @@ export async function createAccountWithEmailPassword(
     throw new Error("Firebase auth is not configured.");
   }
 
+  const emailCredential = FirebaseAuth.EmailAuthProvider.credential(email, password);
+  const strategy = resolveAuthUpgradeStrategy(auth.currentUser?.isAnonymous);
+
+  if (strategy === "link" && auth.currentUser) {
+    try {
+      const linked = await FirebaseAuth.linkWithCredential(auth.currentUser, emailCredential);
+      await applyDisplayName(linked.user, displayName);
+      return linked.user;
+    } catch (error) {
+      if (!shouldFallbackToSignInAfterLinkFailure(getFirebaseErrorCode(error))) {
+        throw error;
+      }
+    }
+  }
+
   const credential = await FirebaseAuth.createUserWithEmailAndPassword(
     auth,
     email,
     password,
   );
-  if (displayName?.trim()) {
-    await FirebaseAuth.updateProfile(credential.user, {
-      displayName: displayName.trim(),
-    });
-  }
+  await applyDisplayName(credential.user, displayName);
   return credential.user;
 }
 
@@ -191,6 +228,19 @@ export async function signInWithGoogleIdToken(idToken: string): Promise<User> {
   }
 
   const credential = FirebaseAuth.GoogleAuthProvider.credential(idToken);
+  const strategy = resolveAuthUpgradeStrategy(auth.currentUser?.isAnonymous);
+
+  if (strategy === "link" && auth.currentUser) {
+    try {
+      const linked = await FirebaseAuth.linkWithCredential(auth.currentUser, credential);
+      return linked.user;
+    } catch (error) {
+      if (!shouldFallbackToSignInAfterLinkFailure(getFirebaseErrorCode(error))) {
+        throw error;
+      }
+    }
+  }
+
   const result = await FirebaseAuth.signInWithCredential(auth, credential);
   return result.user;
 }
