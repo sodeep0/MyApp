@@ -13,7 +13,10 @@ import { normalizeActivities } from '@/repositories/activityNormalization';
 import type { ActivityRepository } from '@/repositories/interfaces/activityRepository';
 import { activityLocalRepository } from '@/repositories/local/activityRepository.local';
 import { enqueueSyncItem, flushSyncQueue, PermanentSyncItemError } from '@/services/sync/syncQueue';
-import { getCloudContext, stripUndefined } from './common';
+import { captureMessage } from '@/services/observability';
+import { getCloudContext, stripUndefined, toIsoString } from './common';
+import { createRefreshGuard, requireQueuedId } from './commonSync';
+import { mergeByUpdatedAt } from './mergeByUpdatedAt';
 
 function activitiesPath(uid: string): string {
   return `users/${uid}/activities`;
@@ -36,13 +39,6 @@ function requireQueuedActivity(payload: unknown): ActivityLog {
     throw new PermanentSyncItemError('queued activity payload is invalid');
   }
   return activity;
-}
-
-function requireQueuedId(payload: unknown, label: string): string {
-  if (typeof payload !== 'string' || payload.trim().length === 0) {
-    throw new PermanentSyncItemError(`queued ${label} id is invalid`);
-  }
-  return payload.trim();
 }
 
 function requireRepositoryId(id: string, label: string): string {
@@ -71,33 +67,36 @@ export async function flushActivityQueue(): Promise<void> {
   });
 }
 
-let isRefreshingActivities = false;
-
-function runInBackground(task: () => Promise<void>): void {
-  void task().catch((error) => {
-    console.warn('Activities background sync task failed.', error);
-  });
-}
+const activitiesRefreshGuard = createRefreshGuard(
+  'Activities cloud refresh failed; keeping local cache.',
+);
 
 function refreshActivitiesFromCloudInBackground(): void {
-  if (isRefreshingActivities) return;
-  isRefreshingActivities = true;
+  activitiesRefreshGuard.run(async () => {
+    const context = await getCloudContext();
+    if (!context) return;
 
-  runInBackground(async () => {
-    try {
-      const context = await getCloudContext();
-      if (!context) return;
-
-      await flushActivityQueue();
-      const q = query(collection(context.db, activitiesPath(context.uid)), orderBy('loggedAt', 'desc'));
-      const snap = await getDocs(q);
-      const entries = normalizeActivities(snap.docs.map((d) => d.data()));
-      await activityLocalRepository.saveActivities(entries);
-    } catch (error) {
-      console.warn('Activities cloud refresh failed; keeping local cache.', error);
-    } finally {
-      isRefreshingActivities = false;
-    }
+    await flushActivityQueue();
+    const q = query(collection(context.db, activitiesPath(context.uid)), orderBy('loggedAt', 'desc'));
+    const snap = await getDocs(q);
+    const remoteEntries = normalizeActivities(
+      snap.docs.map((d) => {
+        const data = d.data() as Record<string, unknown>;
+        return {
+          ...data,
+          loggedAt: typeof data.loggedAt === 'string' ? data.loggedAt : toIsoString(data.loggedAt),
+          createdAt: data.createdAt != null ? toIsoString(data.createdAt) : undefined,
+          updatedAt: data.updatedAt != null
+            ? toIsoString(data.updatedAt)
+            : (typeof data.loggedAt === 'string' ? data.loggedAt : toIsoString(data.loggedAt)),
+        };
+      }),
+    ) as Array<ActivityLog & { updatedAt?: string | null }>;
+    const localEntries = (await activityLocalRepository.getAllActivities()) as Array<
+      ActivityLog & { updatedAt?: string | null }
+    >;
+    const mergedEntries = mergeByUpdatedAt(localEntries, remoteEntries);
+    await activityLocalRepository.saveActivities(mergedEntries);
   });
 }
 
@@ -127,7 +126,11 @@ export const activityFirebaseRepository: ActivityRepository = {
     for (const entry of normalizedEntries) {
       try {
         await setActivityInCloud(context.uid, context.db, entry);
-      } catch {
+      } catch (error) {
+        captureMessage('activities cloud write failed; enqueueing', 'warning', {
+          action: 'setActivity',
+          error: String(error),
+        });
         await enqueueSyncItem('activities', 'setActivity', entry);
       }
     }
@@ -145,7 +148,11 @@ export const activityFirebaseRepository: ActivityRepository = {
     try {
       await setActivityInCloud(context.uid, context.db, entry);
       await flushActivityQueue();
-    } catch {
+    } catch (error) {
+      captureMessage('activities cloud write failed; enqueueing', 'warning', {
+        action: 'setActivity',
+        error: String(error),
+      });
       await enqueueSyncItem('activities', 'setActivity', entry);
     }
     return entry;
@@ -163,7 +170,11 @@ export const activityFirebaseRepository: ActivityRepository = {
     try {
       await setActivityInCloud(context.uid, context.db, updated);
       await flushActivityQueue();
-    } catch {
+    } catch (error) {
+      captureMessage('activities cloud write failed; enqueueing', 'warning', {
+        action: 'setActivity',
+        error: String(error),
+      });
       await enqueueSyncItem('activities', 'setActivity', updated);
     }
     return updated;
@@ -181,7 +192,11 @@ export const activityFirebaseRepository: ActivityRepository = {
     try {
       await deleteActivityInCloud(context.uid, context.db, normalizedId);
       await flushActivityQueue();
-    } catch {
+    } catch (error) {
+      captureMessage('activities cloud write failed; enqueueing', 'warning', {
+        action: 'deleteActivity',
+        error: String(error),
+      });
       await enqueueSyncItem('activities', 'deleteActivity', normalizedId);
     }
   },

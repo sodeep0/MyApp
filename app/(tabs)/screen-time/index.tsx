@@ -1,8 +1,14 @@
 import PermissionGate from "@/components/screenTime/PermissionGate";
-import { PremiumLockedBanner } from "@/components/PremiumLockedBanner";
+import { BlockedAppsPanel } from "@/components/screen-time/BlockedAppsPanel";
+import { FocusPanel } from "@/components/screen-time/FocusPanel";
+import { UsageChart } from "@/components/screen-time/UsageChart";
+import { LoadingState } from "@/components/LoadingState";
+import { ProfileHeaderButton } from "@/components/ProfileHeaderButton";
 import { getPremiumFeatureGate } from "@/constants/featureLimits";
 import {
+  AppBrandGradients,
   Colors,
+  ScreenTimeCategoryColors,
   Shadows,
   Shapes,
   Spacing,
@@ -30,14 +36,12 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSubscription } from "@/hooks/useSubscription";
 import React, { Component, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   InteractionManager,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
   type StyleProp,
@@ -155,32 +159,24 @@ function formatFocusRemaining(ms: number): string {
   return hours > 0 ? `${hours}h ${minutes}m` : `${totalMinutes}m`;
 }
 
-const FOCUS_DURATIONS = [
-  { label: "25", unit: "min", minutes: 25 },
-  { label: "45", unit: "min", minutes: 45 },
-  { label: "60", unit: "min", minutes: 60 },
-];
-
-const PRIMARY_CONTAINER = "#5d6d99" as const;
-
 const APP_CATEGORIES = [
   {
     key: "social",
     label: "Social",
     icon: "people-outline" as const,
-    color: "#E1306C",
+    color: ScreenTimeCategoryColors.social,
   },
   {
     key: "entertainment",
     label: "Entertainment",
     icon: "film-outline" as const,
-    color: "#833AB4",
+    color: ScreenTimeCategoryColors.entertainment,
   },
   {
     key: "games",
     label: "Games",
     icon: "game-controller-outline" as const,
-    color: "#1DB954",
+    color: ScreenTimeCategoryColors.games,
   },
 ];
 
@@ -245,26 +241,26 @@ function getAppGradient(
   const pkg = packageName.toLowerCase();
   const name = appName.toLowerCase();
   if (pkg.includes("instagram") || name.includes("instagram"))
-    return ["#E1306C", "#C13584", "#833AB4"];
+    return [...AppBrandGradients.instagram];
   if (pkg.includes("youtube") || name.includes("youtube"))
-    return ["#FF0000", "#CC0000"];
+    return [...AppBrandGradients.youtube];
   if (pkg.includes("twitter") || pkg.includes("x.") || name.includes("twitter"))
-    return ["#1DA1F2", "#0C6DB5"];
+    return [...AppBrandGradients.twitter];
   if (pkg.includes("whatsapp") || name.includes("whatsapp"))
-    return ["#25D366", "#128C7E"];
+    return [...AppBrandGradients.whatsapp];
   if (pkg.includes("chrome") || name.includes("chrome"))
-    return ["#4285F4", "#34A853"];
+    return [...AppBrandGradients.chrome];
   if (pkg.includes("facebook") || name.includes("facebook"))
-    return ["#1877F2", "#1565d8"];
+    return [...AppBrandGradients.facebook];
   if (pkg.includes("tiktok") || name.includes("tiktok"))
-    return ["#010101", "#69C9D0"];
+    return [...AppBrandGradients.tiktok];
   if (pkg.includes("spotify") || name.includes("spotify"))
-    return ["#1DB954", "#159345"];
+    return [...AppBrandGradients.spotify];
   if (pkg.includes("netflix") || name.includes("netflix"))
-    return ["#E50914", "#B20710"];
+    return [...AppBrandGradients.netflix];
   if (pkg.includes("telegram") || name.includes("telegram"))
-    return ["#0088CC", "#006699"];
-  return [Colors.SteelBlue, PRIMARY_CONTAINER];
+    return [...AppBrandGradients.telegram];
+  return [Colors.SteelBlue, Colors.PrimaryContainer];
 }
 
 function buildBarData(
@@ -428,6 +424,7 @@ function ScreenTimeContent() {
   );
   const [useDemoData, setUseDemoData] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [report, setReport] = useState<ScreenTimeReport | null>(null);
   const [weeklyReport, setWeeklyReport] = useState<{
     dailyTotals: { date: string; totalMs: number }[];
@@ -456,6 +453,7 @@ function ScreenTimeContent() {
     }
     setPermissionGranted(true);
     setUseDemoData(true);
+    setLoadError(null);
     setLoading(false);
   }, []);
 
@@ -471,6 +469,7 @@ function ScreenTimeContent() {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     try {
       const screenTimeReport = await getScreenTimeReport(period);
       setReport(screenTimeReport);
@@ -490,6 +489,7 @@ function ScreenTimeContent() {
     } catch {
       setReport(null);
       setWeeklyReport(null);
+      setLoadError("Could not load screen time data. Try again.");
     }
     setLoading(false);
   }, [period, useDemoData, loadDemoData]);
@@ -581,7 +581,7 @@ function ScreenTimeContent() {
     return <PermissionGate onPermissionGranted={loadDemoData} />;
   }
 
-  if (loading || !report) {
+  if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
@@ -589,10 +589,41 @@ function ScreenTimeContent() {
             <Text style={styles.title}>Screen Time</Text>
             <Text style={styles.subtitle}>{getDateString()}</Text>
           </View>
+          <ProfileHeaderButton />
+        </View>
+        <LoadingState
+          title="Loading screen time"
+          message="Pulling your latest usage into view."
+          fullScreen
+        />
+      </View>
+    );
+  }
+
+  if (loadError || !report) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.title}>Screen Time</Text>
+            <Text style={styles.subtitle}>{getDateString()}</Text>
+          </View>
+          <ProfileHeaderButton />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.SteelBlue} />
-          <Text style={styles.loadingText}>Loading screen time data…</Text>
+          <Text style={styles.loadingText}>
+            {loadError ?? "Could not load screen time data."}
+          </Text>
+          <Pressable
+            onPress={() => void loadData()}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading screen time"
+            style={{ marginTop: Spacing.md }}
+          >
+            <Text style={{ ...Typography.Body2, color: Colors.SteelBlue, fontWeight: "600" }}>
+              Try again
+            </Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -667,6 +698,7 @@ function ScreenTimeContent() {
           <Text style={styles.title}>Screen Time</Text>
           <Text style={styles.subtitle}>{getDateString()}</Text>
         </View>
+        <ProfileHeaderButton />
       </View>
 
       <ScrollView
@@ -822,53 +854,17 @@ function ScreenTimeContent() {
           })}
         </View>
 
-        <View style={styles.chartCard}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Hourly Activity</Text>
-            <Text style={styles.peakLabel}>
-              {period === "today"
-                ? `Peak: ${findPeakHour(report.hourBreakdown)}`
-                : `${period} total`}
-            </Text>
-          </View>
-          <View style={styles.chartBars}>
-            {(period === "week" && weeklyBarData ? weeklyBarData : barData).map(
-              (height, i) => {
-                const opacity = 0.2 + (Math.max(height, 1) / 100) * 0.8;
-                return (
-                  <View key={i} style={styles.chartBarColumn}>
-                    <View
-                      style={[
-                        styles.chartBar,
-                        {
-                          height: `${Math.max(height, 2)}%`,
-                          backgroundColor: Colors.SteelBlue,
-                          opacity,
-                        },
-                      ]}
-                    />
-                  </View>
-                );
-              },
-            )}
-          </View>
-          <View style={styles.chartLabels}>
-            {(period === "week"
-              ? barLabels.filter((_, i) => {
-                  const step = Math.max(1, Math.floor(7 / 4));
-                  return i % step === 0 || i === 6;
-                })
-              : barLabels.filter((_, i) => {
-                  const step = Math.floor(barLabels.length / 4);
-                  return i % step === 0 || i === barLabels.length - 1;
-                })
-            ).map((label, i) => (
-              <Text key={i} style={styles.chartLabel}>
-                {label}
-              </Text>
-            ))}
-          </View>
-        </View>
+        <UsageChart
+          period={period}
+          barData={barData}
+          weeklyBarData={weeklyBarData}
+          barLabels={barLabels}
+          peakLabel={
+            period === "today"
+              ? `Peak: ${findPeakHour(report.hourBreakdown)}`
+              : `${period} total`
+          }
+        />
 
         <View style={styles.appsHeader}>
           <Text style={styles.appsHeaderTitle}>Most Used Apps</Text>
@@ -952,109 +948,25 @@ function ScreenTimeContent() {
           );
         })}
 
-        <LinearGradient
-          colors={[Colors.SteelBlue, Colors.TextPrimary]}
-          style={styles.focusCard}
-        >
-          {focusAndBlockingGate.locked && (
-            <View style={styles.focusBannerWrap}>
-              <PremiumLockedBanner
-                featureName={focusAndBlockingGate.featureName}
-                onUpgrade={handlePremiumUpgrade}
-              />
-            </View>
-          )}
-          <View style={styles.focusContent}>
-            <View style={styles.focusHeader}>
-              <Ionicons name="cellular" size={24} color={Colors.SoftSky} />
-              <Text style={styles.focusTitle}>Set Focus Session</Text>
-            </View>
-            <Text style={styles.focusDescription}>
-              Plan a focused stretch with a timer. Selected apps are saved as
-              intentions; Kaarma does not block them yet.
-            </Text>
-            <View style={styles.focusButtonsRow}>
-              {FOCUS_DURATIONS.map((duration) => (
-                <AnimatedPressable
-                  key={duration.label}
-                  style={styles.focusBtn}
-                  onPress={
-                    focusSessionsGate.locked
-                      ? handlePremiumUpgrade
-                      : () => handleStartFocus(duration.minutes)
-                  }
-                >
-                  <Text style={styles.focusBtnLabel}>{duration.label}</Text>
-                  <Text style={styles.focusBtnUnit}>{duration.unit}</Text>
-                </AnimatedPressable>
-              ))}
-            </View>
-          </View>
-          <View style={styles.decoCircle} />
-        </LinearGradient>
+        <FocusPanel
+          locked={focusSessionsGate.locked}
+          showPremiumBanner={focusAndBlockingGate.locked}
+          premiumFeatureName={focusAndBlockingGate.featureName}
+          onStartFocus={handleStartFocus}
+          onPremiumUpgrade={handlePremiumUpgrade}
+        />
 
-        <View style={styles.sectionHeader}>
-          <Ionicons
-            name="lock-closed-outline"
-            size={16}
-            color={Colors.TextSecondary}
-          />
-          <Text style={styles.sectionHeaderText}>Focus App Plan</Text>
-        </View>
-        <Text style={styles.sectionHelperText}>
-          These toggles mark apps to avoid during focus sessions. They do not
-          prevent the apps from opening.
-        </Text>
-        <View style={styles.blockedAppsContainer}>
-          {topApps.slice(0, 6).map((app, index) => {
-            const isBlocked = !!blockedApps[app.packageName];
-            const ionicon = getAppIcon(app.packageName, app.appName);
-            const gradientColors = getAppGradient(app.packageName, app.appName);
-            return (
-              <View key={index} style={styles.blockedAppRow}>
-                <LinearGradient
-                  colors={gradientColors}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[
-                    styles.blockedAppIcon,
-                    isBlocked && styles.appIconBlocked,
-                  ]}
-                >
-                  <Ionicons
-                    name={ionicon}
-                    size={18}
-                    color={isBlocked ? Colors.TextSecondary : Colors.Surface}
-                  />
-                </LinearGradient>
-                <Text
-                  style={[
-                    styles.blockedAppName,
-                    isBlocked && styles.appNameBlocked,
-                  ]}
-                >
-                  {app.appName}
-                </Text>
-                <Switch
-                  value={isBlocked}
-                  onValueChange={() => {
-                    if (!appBlockingGate.locked) {
-                      toggleBlockedApp(app.packageName);
-                      return;
-                    }
-
-                    handlePremiumUpgrade();
-                  }}
-                  trackColor={{
-                    false: Colors.BorderSubtle,
-                    true: Colors.Danger + "80",
-                  }}
-                  thumbColor={isBlocked ? Colors.Danger : Colors.Surface}
-                />
-              </View>
-            );
-          })}
-        </View>
+        <BlockedAppsPanel
+          apps={topApps}
+          blockedApps={blockedApps}
+          locked={appBlockingGate.locked}
+          getAppIcon={getAppIcon}
+          getAppGradient={getAppGradient}
+          onToggleBlocked={(pkg) => {
+            void toggleBlockedApp(pkg);
+          }}
+          onPremiumUpgrade={handlePremiumUpgrade}
+        />
 
         <AnimatedPressable
           style={styles.manageLimits}

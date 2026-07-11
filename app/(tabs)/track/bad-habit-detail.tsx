@@ -374,7 +374,7 @@ export default function BadHabitDetailScreen() {
         {/* Milestone Card */}
         {milestoneMsg && (
           <LinearGradient
-            colors={[Colors.Success, '#6DD5A0']}
+            colors={[Colors.Success, Colors.SuccessSoft]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.milestoneCard}
@@ -670,7 +670,7 @@ export default function BadHabitDetailScreen() {
               ]}
             >
               <LinearGradient
-                colors={[Colors.Success, '#6DD5A0']}
+                colors={[Colors.Success, Colors.SuccessSoft]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.resistBtnGradient}

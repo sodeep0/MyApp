@@ -7,19 +7,33 @@ import {
   setOnboardingCompleted,
   updateDisplayName,
 } from '@/stores/userStore';
+import {
+  invalidate as emitInvalidate,
+  subscribe,
+  type InvalidateDomain,
+} from '@/stores/invalidate';
+import { getAllHabits } from '@/stores/habitStore';
+import { getAllGoals } from '@/stores/goalStore';
+import { getAllActivities } from '@/stores/activityStore';
+import { getAllJournalEntries } from '@/stores/journalStore';
+import { getAllBadHabits } from '@/stores/badHabitStore';
 import { storage } from '@/storage/asyncStorage';
+
+export type { InvalidateDomain };
 
 /**
  * Generic hook that loads data once and provides a refresh function.
- * Use for lists and detail screens.
+ * Pass `domain` to re-fetch when that invalidate bus domain is emitted.
  */
 export function useAsyncData<T>(
   fetcher: () => Promise<T>,
   deps: unknown[] = [],
+  options?: { domain?: InvalidateDomain | '*' },
 ): { data: T | null; loading: boolean; error: Error | null; refresh: () => void } {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const domain = options?.domain;
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -36,7 +50,35 @@ export function useAsyncData<T>(
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!domain) return;
+    return subscribe(domain, refresh);
+  }, [domain, refresh]);
+
   return { data, loading, error, refresh };
+}
+
+/** Re-export for screens that prefer calling invalidate via the hook module. */
+export { emitInvalidate as invalidate, subscribe };
+
+export function useHabitsData() {
+  return useAsyncData(() => getAllHabits(), [], { domain: 'habits' });
+}
+
+export function useGoalsData() {
+  return useAsyncData(() => getAllGoals(), [], { domain: 'goals' });
+}
+
+export function useActivitiesData() {
+  return useAsyncData(() => getAllActivities(), [], { domain: 'activities' });
+}
+
+export function useJournalData() {
+  return useAsyncData(() => getAllJournalEntries(), [], { domain: 'journal' });
+}
+
+export function useBadHabitsData() {
+  return useAsyncData(() => getAllBadHabits(), [], { domain: 'badHabits' });
 }
 
 /**
@@ -51,9 +93,13 @@ export function useDisplayName(): [string, (name: string) => Promise<void>] {
     };
 
     loadName();
-    const unsubscribe = storage.subscribe(DISPLAY_NAME_KEY, loadName);
+    const unsubscribeStorage = storage.subscribe(DISPLAY_NAME_KEY, loadName);
+    const unsubscribeInvalidate = subscribe('profile', loadName);
 
-    return unsubscribe;
+    return () => {
+      unsubscribeStorage();
+      unsubscribeInvalidate();
+    };
   }, []);
 
   const updateName = async (newName: string) => {

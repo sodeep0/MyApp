@@ -1,7 +1,20 @@
 # Kaarma - Implementation Progress
 
 > Last verified: 2026-07-11
-> Status: working Expo prototype with local-first data, hybrid cloud foundation, audit remediation (account deletion, anonymous linking, local-first cloud reads, CI, encryption fail-closed)
+> Status: working Expo prototype with local-first data, hybrid cloud foundation, audit remediation (account deletion, anonymous linking, local-first cloud reads, CI, encryption fail-closed), Wave 5 UI polish + deploy safety
+
+## Wave 0–5 status summary (Score 95+ roadmap)
+
+| Wave | Focus | Status |
+|------|--------|--------|
+| 0 | Sentry, CI npm audit, Dependabot, env docs | Done |
+| 1 | a11y, error/loading parity, completions batching, sync health UI, catch logging | Done |
+| 2 | Auth upgrade choice UX, App Check, AES-GCM v3, sensitive normalization | Done (AUTH/crypto manual review before prod) |
+| 3 | LWW merge, completions cloud pull, schema docs, deletion batching | Done (sync semantics review before prod) |
+| 4 | Invalidation bus, SoC splits, commonSync, rules/Maestro smoke tests | Done |
+| 5 | Theme tokens, profile nav/deep links, CI rules deploy, network hydrate, MVP QA checklist | Done |
+
+Wave 5 highlights: theme tokens for Screen Time / Goal detail / Bad-habit detail; profile header on Habits/Goals/Track/Time; Firestore rules CI + optional deploy; OfflineBanner shares `isOfflineNetworkState` with sync; hydrate failure no longer assumes online.
 
 ## Snapshot
 
@@ -21,11 +34,11 @@ It is still not release-ready. Several product rules from the original vision re
 
 - `npx tsc --noEmit` / `npm run typecheck`: passing on 2026-07-11
 - `npm run lint`: passing on 2026-07-11
-- `npm run test:storage`: passing on 2026-07-11 (157 tests)
+- `npm run test:storage`: passing on 2026-07-11 (179 tests)
 - Current lint status: 0 errors, 0 warnings
-- CI: `.github/workflows/ci.yml` runs typecheck, lint, and `test:storage` on PRs
-- MVP manual/native QA checklist: `docs/mvp-qa-checklist.md` defines the release-readiness checks, but those manual and native-device items are not yet marked as run
-- Automated tests: focused storage/domain tests cover encryption helpers, auth upgrade policy, account-deletion rules/resilience, sync drop telemetry, local-first cloud read policies, feature gates, local-only privacy, and related domain rules; broad UI/E2E coverage is still missing
+- CI: `.github/workflows/ci.yml` runs typecheck, lint, `test:storage`, and `test:rules` (Firestore policy) on PRs/`main`; optional `workflow_dispatch` Firestore rules deploy
+- MVP manual/native QA checklist: `docs/mvp-qa-checklist.md` defines the release-readiness checks; Wave 0–5 automated/code items are marked; manual and native-device items are not yet marked as run
+- Automated tests: focused storage/domain tests cover encryption helpers (AES-GCM v3), auth upgrade choice, account-deletion rules/resilience, LWW merge, invalidation bus, sync drop telemetry, local-first cloud read policies, feature gates, local-only privacy, and related domain rules; Maestro smoke flow shipped under `.maestro/`
 
 ## Actual Stack
 
@@ -58,7 +71,8 @@ It is still not release-ready. Several product rules from the original vision re
 | Onboarding redirect | Verified | Redirect logic lives in `app/index.tsx` |
 | Onboarding skip-to-auth path | Verified | "I already have an account" now marks onboarding complete and routes to `/auth/sign-in` |
 | Root bootstrap | Verified | Fonts, auth bootstrap, sync trigger wiring in `app/_layout.tsx` |
-| Deep linking | Partial | Redirect/callback files exist, but routing/documentation is not finalized |
+| Deep linking | Verified | Notification routes mapped in README; weekly review → `/(tabs)?review=weekly`; profile reachable from main tab headers |
+| Offline banner / sync hydrate | Verified | Shared offline predicate; hydrate failure treats network as offline (does not assume online) |
 
 ### Auth and profile
 

@@ -95,7 +95,7 @@ export function routeForNotificationData(
   }
 
   if (data.type === 'weekly-review') {
-    return '/(tabs)';
+    return '/(tabs)?review=weekly';
   }
 
   return null;

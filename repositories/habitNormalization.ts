@@ -52,12 +52,19 @@ export function normalizeHabits(value: unknown): Habit[] {
 export function normalizeHabitCompletions(value: unknown): HabitCompletion[] {
   if (!Array.isArray(value)) return [];
 
-  return value.filter((completion): completion is HabitCompletion => (
-    !!completion
-    && typeof completion === 'object'
-    && typeof (completion as Partial<HabitCompletion>).id === 'string'
-    && typeof (completion as Partial<HabitCompletion>).habitId === 'string'
-    && typeof (completion as Partial<HabitCompletion>).completedDate === 'string'
-    && typeof (completion as Partial<HabitCompletion>).completedAt === 'string'
-  ));
+  return value
+    .filter((completion): completion is HabitCompletion => (
+      !!completion
+      && typeof completion === 'object'
+      && typeof (completion as Partial<HabitCompletion>).id === 'string'
+      && typeof (completion as Partial<HabitCompletion>).habitId === 'string'
+      && typeof (completion as Partial<HabitCompletion>).completedDate === 'string'
+      && typeof (completion as Partial<HabitCompletion>).completedAt === 'string'
+    ))
+    .map((completion) => {
+      const updatedAt = typeof completion.updatedAt === 'string' && completion.updatedAt.trim().length > 0
+        ? completion.updatedAt
+        : completion.completedAt;
+      return { ...completion, updatedAt };
+    });
 }

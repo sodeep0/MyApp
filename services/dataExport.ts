@@ -1,7 +1,7 @@
 import { getAllActivities } from '@/stores/activityStore';
 import { getAllBadHabits, getAllUrgeEvents } from '@/stores/badHabitStore';
 import { getAllGoals } from '@/stores/goalStore';
-import { getAllHabits, getCompletionsForHabit } from '@/stores/habitStore';
+import { getAllCompletions, getAllHabits } from '@/stores/habitStore';
 import { getAllJournalEntries } from '@/stores/journalStore';
 import { getUserProfile } from '@/stores/userStore';
 import { getScreenTimeExportState, type ScreenTimeExportState } from '@/services/screenTimeState';
@@ -61,22 +61,13 @@ export async function buildExportPayload(now: Date = new Date()): Promise<Kaarma
     getScreenTimeExportState(now.getTime()),
   ]);
 
-  const completionResults = await Promise.allSettled(
-    habits.map(async (habit) => ({
-      habitId: habit.id,
-      completions: await getCompletionsForHabit(habit.id),
-    })),
-  );
   const warnings: string[] = [];
-  const habitCompletions = completionResults.flatMap((result, index) => {
-    if (result.status === 'fulfilled') {
-      return result.value.completions;
-    }
-
-    const habitId = habits[index]?.id ?? 'unknown';
-    warnings.push(`Habit completions for ${habitId} could not be included.`);
-    return [];
-  });
+  let habitCompletions: HabitCompletion[] = [];
+  try {
+    habitCompletions = await getAllCompletions();
+  } catch {
+    warnings.push('Habit completions could not be included.');
+  }
 
   return {
     app: 'Kaarma',

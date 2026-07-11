@@ -20,14 +20,19 @@ import { CommonStyles } from '@/constants/commonStyles';
 import { useCountLimitedFeatureGate } from '@/hooks/useFeatureGate';
 import { safeBack } from '@/navigation/safeBack';
 import { isCountLimitedFeatureLockedError } from '@/services/featureAccess';
-import { addGoal, getActiveGoalCount, updateGoal, getGoalById } from '@/stores/goalStore';
+import {
+  addGoal,
+  createMilestone,
+  getActiveGoalCount,
+  updateGoal,
+  getGoalById,
+} from '@/stores/goalStore';
 import {
   GoalCategory,
   GoalType,
   GoalStatus,
   type Milestone,
 } from '@/types/models';
-import { generateUUID } from '@/utils/id';
 
 function getDateString() {
   return new Date().toLocaleDateString('en-US', {
@@ -149,31 +154,33 @@ export default function AddEditGoalScreen() {
   useEffect(() => {
     if (!isEditing) return;
     const loadGoal = async () => {
-      const goal = await getGoalById(id as string);
-      if (goal) {
-        setTitle(goal.title);
-        setDescription(goal.description || '');
-        setCategory(goal.category);
-        setGoalType(goal.goalType);
-        setTargetValue(goal.targetValue?.toString() || '');
-        setUnit(goal.unit || '');
-        setTargetDate(goal.targetDate || '');
-        setMilestones(goal.milestones);
+      try {
+        const goal = await getGoalById(id as string);
+        if (goal) {
+          setTitle(goal.title);
+          setDescription(goal.description || '');
+          setCategory(goal.category);
+          setGoalType(goal.goalType);
+          setTargetValue(goal.targetValue?.toString() || '');
+          setUnit(goal.unit || '');
+          setTargetDate(goal.targetDate || '');
+          setMilestones(goal.milestones);
+        } else {
+          Alert.alert('Not found', 'This goal could not be loaded. Please go back and try again.');
+        }
+      } catch (error) {
+        console.error('Failed to load goal:', error);
+        Alert.alert('Error', 'Failed to load goal. Please go back and try again.');
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     loadGoal();
   }, [id, isEditing]);
 
   const addMilestone = () => {
     if (milestoneInput.trim() && milestones.length < 10) {
-      const newMilestone: Milestone = {
-        id: generateUUID(),
-        title: milestoneInput.trim(),
-        isCompleted: false,
-        completedAt: null,
-      };
-      setMilestones([...milestones, newMilestone]);
+      setMilestones([...milestones, createMilestone(milestoneInput)]);
       setMilestoneInput('');
     }
   };

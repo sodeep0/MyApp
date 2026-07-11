@@ -92,7 +92,6 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
                     color={isActive ? Colors.SteelBlue : Colors.DustyTaupe}
                   />
                   <Text
-                    allowFontScaling={false}
                     adjustsFontSizeToFit
                     minimumFontScale={0.8}
                     ellipsizeMode="clip"

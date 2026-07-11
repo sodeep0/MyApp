@@ -13,7 +13,13 @@ import { normalizeHabitCompletions, normalizeHabits } from '@/repositories/habit
 import type { HabitRepository } from '@/repositories/interfaces/habitRepository';
 import { habitLocalRepository } from '@/repositories/local/habitRepository.local';
 import { enqueueSyncItem, flushSyncQueue, PermanentSyncItemError } from '@/services/sync/syncQueue';
-import { getCloudContext, stripUndefined } from './common';
+import { captureMessage } from '@/services/observability';
+import { getCloudContext, stripUndefined, toIsoString } from './common';
+import { createRefreshGuard, requireQueuedId, runInBackground } from './commonSync';
+import { mergeByUpdatedAt } from './mergeByUpdatedAt';
+
+/** Completions live at users/{uid}/habits/{habitId}/completions/{completionId}. */
+const COMPLETION_FETCH_CHUNK = 8;
 
 function habitsPath(uid: string): string {
   return `users/${uid}/habits`;
@@ -21,6 +27,54 @@ function habitsPath(uid: string): string {
 
 function completionsPath(uid: string, habitId: string): string {
   return `users/${uid}/habits/${habitId}/completions`;
+}
+
+type HabitWithUpdatedAt = Habit & { updatedAt?: string | null };
+type CompletionWithUpdatedAt = HabitCompletion & { updatedAt?: string | null };
+
+function normalizeCloudHabitDoc(data: Record<string, unknown>): unknown {
+  return {
+    ...data,
+    createdAt: typeof data.createdAt === 'string' ? data.createdAt : toIsoString(data.createdAt),
+    updatedAt: data.updatedAt != null ? toIsoString(data.updatedAt) : undefined,
+  };
+}
+
+function normalizeCloudCompletionDoc(data: Record<string, unknown>): unknown {
+  const completedAt = typeof data.completedAt === 'string'
+    ? data.completedAt
+    : toIsoString(data.completedAt);
+  const updatedAt = data.updatedAt != null
+    ? toIsoString(data.updatedAt)
+    : completedAt;
+  return {
+    ...data,
+    completedAt,
+    updatedAt,
+  };
+}
+
+async function fetchCompletionsForHabits(
+  uid: string,
+  db: Firestore,
+  habitIds: string[],
+): Promise<CompletionWithUpdatedAt[]> {
+  const all: CompletionWithUpdatedAt[] = [];
+
+  for (let index = 0; index < habitIds.length; index += COMPLETION_FETCH_CHUNK) {
+    const chunk = habitIds.slice(index, index + COMPLETION_FETCH_CHUNK);
+    const chunkResults = await Promise.all(
+      chunk.map(async (habitId) => {
+        const snap = await getDocs(collection(db, completionsPath(uid, habitId)));
+        return normalizeHabitCompletions(
+          snap.docs.map((entry) => normalizeCloudCompletionDoc(entry.data() as Record<string, unknown>)),
+        );
+      }),
+    );
+    all.push(...chunkResults.flat());
+  }
+
+  return all;
 }
 
 async function setHabitInCloud(uid: string, db: Firestore, habit: Habit): Promise<void> {
@@ -35,8 +89,14 @@ async function deleteHabitInCloud(uid: string, db: Firestore, id: string): Promi
 }
 
 async function setCompletionInCloud(uid: string, db: Firestore, completion: HabitCompletion): Promise<void> {
+  const now = new Date().toISOString();
+  const payload = {
+    ...completion,
+    userId: uid,
+    updatedAt: completion.updatedAt ?? completion.completedAt ?? now,
+  };
   const ref = doc(db, `${completionsPath(uid, completion.habitId)}/${completion.id}`);
-  await setDoc(ref, stripUndefined({ ...completion, userId: uid, updatedAt: new Date().toISOString() }), {
+  await setDoc(ref, stripUndefined(payload), {
     merge: true,
   });
 }
@@ -51,11 +111,33 @@ async function removeTodayCompletionInCloud(uid: string, db: Firestore, habitId:
   }
 }
 
-let isRefreshingHabits = false;
+const habitsRefreshGuard = createRefreshGuard('Habits cloud refresh failed; keeping local cache.');
 
-function runInBackground(task: () => Promise<void>): void {
-  void task().catch((error) => {
-    console.warn('Habits background sync task failed.', error);
+function refreshHabitsFromCloudInBackground(): void {
+  habitsRefreshGuard.run(async () => {
+    const context = await getCloudContext();
+    if (!context) return;
+
+    await flushHabitQueue();
+    const q = query(collection(context.db, habitsPath(context.uid)), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    const remoteHabits = normalizeHabits(
+      snap.docs.map((d) => normalizeCloudHabitDoc(d.data() as Record<string, unknown>)),
+    ) as HabitWithUpdatedAt[];
+    const localHabits = (await habitLocalRepository.getAllHabits()) as HabitWithUpdatedAt[];
+    const mergedHabits = mergeByUpdatedAt(localHabits, remoteHabits);
+    await habitLocalRepository.saveHabits(mergedHabits);
+
+    // Completions: users/{uid}/habits/{habitId}/completions/{completionId}
+    const habitIds = mergedHabits.map((habit) => habit.id);
+    const remoteCompletions = await fetchCompletionsForHabits(
+      context.uid,
+      context.db,
+      habitIds,
+    );
+    const localCompletions = (await habitLocalRepository.getAllCompletions()) as CompletionWithUpdatedAt[];
+    const mergedCompletions = mergeByUpdatedAt(localCompletions, remoteCompletions);
+    await habitLocalRepository.saveCompletions(mergedCompletions);
   });
 }
 
@@ -70,10 +152,14 @@ function queueOrPushHabitInBackground(habit: Habit): void {
     try {
       await setHabitInCloud(context.uid, context.db, habit);
       await flushHabitQueue();
-    } catch {
+    } catch (error) {
+      captureMessage('habits cloud write failed; enqueueing', 'warning', {
+        action: 'setHabit',
+        error: String(error),
+      });
       await enqueueSyncItem('habits', 'setHabit', habit);
     }
-  });
+  }, 'Habits background sync task failed.');
 }
 
 function queueOrDeleteHabitInBackground(id: string): void {
@@ -87,16 +173,20 @@ function queueOrDeleteHabitInBackground(id: string): void {
     try {
       await deleteHabitInCloud(context.uid, context.db, id);
       await flushHabitQueue();
-    } catch {
+    } catch (error) {
+      captureMessage('habits cloud write failed; enqueueing', 'warning', {
+        action: 'deleteHabit',
+        error: String(error),
+      });
       await enqueueSyncItem('habits', 'deleteHabit', id);
     }
-  });
+  }, 'Habits background sync task failed.');
 }
 
 function queueOrPushCompletionInBackground(completion: HabitCompletion): void {
   runInBackground(async () => {
     await syncCompletionToCloud(completion);
-  });
+  }, 'Habits background sync task failed.');
 }
 
 function queueOrRemoveCompletionInBackground(habitId: string): void {
@@ -110,30 +200,14 @@ function queueOrRemoveCompletionInBackground(habitId: string): void {
     try {
       await removeTodayCompletionInCloud(context.uid, context.db, habitId);
       await flushHabitQueue();
-    } catch {
+    } catch (error) {
+      captureMessage('habits cloud write failed; enqueueing', 'warning', {
+        action: 'removeTodayCompletion',
+        error: String(error),
+      });
       await enqueueSyncItem('habits', 'removeTodayCompletion', habitId);
     }
-  });
-}
-
-function refreshHabitsFromCloudInBackground(): void {
-  if (isRefreshingHabits) return;
-  isRefreshingHabits = true;
-
-  runInBackground(async () => {
-    try {
-      const context = await getCloudContext();
-      if (!context) return;
-
-      await flushHabitQueue();
-      const q = query(collection(context.db, habitsPath(context.uid)), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
-      const habits = normalizeHabits(snap.docs.map((d) => d.data()));
-      await habitLocalRepository.saveHabits(habits);
-    } finally {
-      isRefreshingHabits = false;
-    }
-  });
+  }, 'Habits background sync task failed.');
 }
 
 export async function flushHabitQueue(): Promise<void> {
@@ -175,7 +249,11 @@ async function syncCompletionToCloud(completion: HabitCompletion): Promise<void>
   try {
     await setCompletionInCloud(context.uid, context.db, completion);
     await flushHabitQueue();
-  } catch {
+  } catch (error) {
+    captureMessage('habits cloud write failed; enqueueing', 'warning', {
+      action: 'setCompletion',
+      error: String(error),
+    });
     await enqueueSyncItem('habits', 'setCompletion', completion);
   }
 }
@@ -194,13 +272,6 @@ function requireQueuedCompletion(payload: unknown): HabitCompletion {
     throw new PermanentSyncItemError('queued habit completion payload is invalid');
   }
   return completion;
-}
-
-function requireQueuedId(payload: unknown, label: string): string {
-  if (typeof payload !== 'string' || payload.trim().length === 0) {
-    throw new PermanentSyncItemError(`queued ${label} id is invalid`);
-  }
-  return payload.trim();
 }
 
 function requireRepositoryId(id: string, label: string): string {

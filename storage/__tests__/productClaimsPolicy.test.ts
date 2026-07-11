@@ -43,7 +43,11 @@ test('premium screen labels the mock subscription flow as a preview', () => {
 });
 
 test('screen-time dashboard copy does not imply native blocking enforcement', () => {
-  const source = readProjectFile('app/(tabs)/screen-time/index.tsx');
+  const source = [
+    readProjectFile('app/(tabs)/screen-time/index.tsx'),
+    readProjectFile('components/screen-time/FocusPanel.tsx'),
+    readProjectFile('components/screen-time/BlockedAppsPanel.tsx'),
+  ].join('\n');
 
   assert.doesNotMatch(source, /Lock distractions/i);
   assert.doesNotMatch(source, />Blocked Apps</);

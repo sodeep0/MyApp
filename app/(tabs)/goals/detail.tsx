@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LoadingState } from '@/components/LoadingState';
-import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
+import { Colors, GoalCategoryColors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
 import { safeBack } from '@/navigation/safeBack';
 import { getGoalById, updateGoal, toggleMilestone } from '@/stores/goalStore';
 import { type Goal, GoalStatus } from '@/types/models';
@@ -113,12 +113,12 @@ export default function GoalDetailScreen() {
     PERSONAL: 'person-outline',
   };
   const catColors: Record<string, string> = {
-    FITNESS: Colors.Success,
-    LEARNING: '#7B68EE',
-    CAREER: Colors.SteelBlue,
-    FINANCE: Colors.Warning,
-    RELATIONSHIP: '#E91E63',
-    PERSONAL: Colors.SoftSky,
+    FITNESS: GoalCategoryColors.FITNESS,
+    LEARNING: GoalCategoryColors.LEARNING,
+    CAREER: GoalCategoryColors.CAREER,
+    FINANCE: GoalCategoryColors.FINANCE,
+    RELATIONSHIP: GoalCategoryColors.RELATIONSHIP,
+    PERSONAL: GoalCategoryColors.PERSONAL,
   };
   const catColor = catColors[currentGoal.category] || Colors.SteelBlue;
   const catIcon = catIcons[currentGoal.category] || 'flag-outline';

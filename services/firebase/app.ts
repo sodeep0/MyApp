@@ -1,6 +1,23 @@
 import { FirebaseApp, FirebaseOptions, getApp, getApps, initializeApp } from 'firebase/app';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import {
+  CustomProvider,
+  initializeAppCheck,
+  ReCaptchaV3Provider,
+} from 'firebase/app-check';
 import { Platform } from 'react-native';
+import {
+  isAppCheckEnabledByEnv,
+  isAppCheckInitPathAvailable,
+  resolveAppCheckInitPath,
+  type AppCheckInitPath,
+} from './appCheckPolicy';
+
+export type { AppCheckInitPath };
+export {
+  isAppCheckEnabledByEnv,
+  isAppCheckInitPathAvailable,
+  resolveAppCheckInitPath,
+};
 
 let hasWarnedMissingConfig = false;
 let hasInitializedAppCheck = false;
@@ -22,26 +39,60 @@ export function isFirebaseConfigured(): boolean {
   return Boolean(config.apiKey && config.projectId && config.appId);
 }
 
+function currentAppCheckPath(): AppCheckInitPath {
+  return resolveAppCheckInitPath({
+    enabled: isAppCheckEnabledByEnv(),
+    platform: Platform.OS,
+    siteKey: process.env.EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY,
+    debugToken: process.env.EXPO_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN,
+  });
+}
+
+function createDebugTokenProvider(debugToken: string): CustomProvider {
+  return new CustomProvider({
+    getToken: async () => ({
+      token: debugToken,
+      expireTimeMillis: Date.now() + 60 * 60 * 1000,
+    }),
+  });
+}
+
 function maybeInitializeAppCheck(app: FirebaseApp): void {
   if (hasInitializedAppCheck) return;
-  if (process.env.EXPO_PUBLIC_FIREBASE_APP_CHECK !== 'true') return;
+  if (!isAppCheckEnabledByEnv()) return;
 
-  // Web can use reCAPTCHA v3 when a site key is configured. Native Play Integrity /
-  // DeviceCheck providers require additional native setup — enable in console first.
-  const siteKey = process.env.EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY;
-  if (Platform.OS !== 'web' || !siteKey) {
-    console.warn(
-      '[firebase] App Check flag enabled but provider is not configured for this platform. Skipping init.',
-    );
-    hasInitializedAppCheck = true;
-    return;
-  }
+  const path = currentAppCheckPath();
 
   try {
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(siteKey),
-      isTokenAutoRefreshEnabled: true,
-    });
+    if (path === 'recaptcha-v3') {
+      const siteKey = process.env.EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY!;
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(siteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+      hasInitializedAppCheck = true;
+      return;
+    }
+
+    if (path === 'custom-debug-token') {
+      const debugToken = process.env.EXPO_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN!;
+      // Native Play Integrity / DeviceCheck ideally use @react-native-firebase/app-check.
+      // When that package is not installed, CustomProvider + debug token supports local/dev.
+      initializeAppCheck(app, {
+        provider: createDebugTokenProvider(debugToken),
+        isTokenAutoRefreshEnabled: true,
+      });
+      hasInitializedAppCheck = true;
+      return;
+    }
+
+    // custom-warn-only (web without site key, or native without debug token)
+    console.warn(
+      '[firebase] App Check flag enabled but no provider credentials are configured. '
+        + 'Web needs EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY; native needs '
+        + 'EXPO_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN (dev) or @react-native-firebase/app-check. '
+        + 'Marking App Check as initialized without tokens — enable enforcement in Firebase Console only after providers work.',
+    );
     hasInitializedAppCheck = true;
   } catch (error) {
     console.warn('[firebase] App Check initialization failed.', error);

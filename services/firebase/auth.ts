@@ -11,9 +11,10 @@ import { Auth, Persistence, User, UserCredential } from "firebase/auth";
 import { Platform } from "react-native";
 import { getFirebaseApp } from "./app";
 import {
+  AuthUpgradeRequiresChoiceError,
   getFirebaseErrorCode,
+  isCredentialCollisionError,
   resolveAuthUpgradeStrategy,
-  shouldFallbackToSignInAfterLinkFailure,
 } from "./authUpgradePolicy";
 
 let authInstance: Auth | null = null;
@@ -28,6 +29,12 @@ type SessionCleanupStep = {
 
 function getSessionCleanupErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function throwIfCredentialCollision(error: unknown): never | void {
+  if (isCredentialCollisionError(getFirebaseErrorCode(error))) {
+    throw new AuthUpgradeRequiresChoiceError();
+  }
 }
 
 async function clearSignedInUserSessionData(): Promise<void> {
@@ -144,6 +151,42 @@ async function applyDisplayName(user: User, displayName?: string): Promise<void>
   }
 }
 
+export async function continueWithExistingAccountSignIn(
+  email: string,
+  password: string,
+): Promise<User> {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    throw new Error("Firebase auth is not configured.");
+  }
+
+  const credential = await FirebaseAuth.signInWithEmailAndPassword(
+    auth,
+    email,
+    password,
+  );
+  return credential.user;
+}
+
+/** After create-account collision choice: sign into the existing account (do not create again). */
+export async function continueCreateAccountSignIn(
+  email: string,
+  password: string,
+): Promise<User> {
+  return continueWithExistingAccountSignIn(email, password);
+}
+
+export async function continueWithExistingGoogleAccount(idToken: string): Promise<User> {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    throw new Error("Firebase auth is not configured.");
+  }
+
+  const credential = FirebaseAuth.GoogleAuthProvider.credential(idToken);
+  const result = await FirebaseAuth.signInWithCredential(auth, credential);
+  return result.user;
+}
+
 export async function signInWithEmailPassword(
   email: string,
   password: string,
@@ -161,9 +204,8 @@ export async function signInWithEmailPassword(
       const linked = await FirebaseAuth.linkWithCredential(auth.currentUser, emailCredential);
       return linked.user;
     } catch (error) {
-      if (!shouldFallbackToSignInAfterLinkFailure(getFirebaseErrorCode(error))) {
-        throw error;
-      }
+      throwIfCredentialCollision(error);
+      throw error;
     }
   }
 
@@ -194,19 +236,23 @@ export async function createAccountWithEmailPassword(
       await applyDisplayName(linked.user, displayName);
       return linked.user;
     } catch (error) {
-      if (!shouldFallbackToSignInAfterLinkFailure(getFirebaseErrorCode(error))) {
-        throw error;
-      }
+      throwIfCredentialCollision(error);
+      throw error;
     }
   }
 
-  const credential = await FirebaseAuth.createUserWithEmailAndPassword(
-    auth,
-    email,
-    password,
-  );
-  await applyDisplayName(credential.user, displayName);
-  return credential.user;
+  try {
+    const credential = await FirebaseAuth.createUserWithEmailAndPassword(
+      auth,
+      email,
+      password,
+    );
+    await applyDisplayName(credential.user, displayName);
+    return credential.user;
+  } catch (error) {
+    throwIfCredentialCollision(error);
+    throw error;
+  }
 }
 
 export async function signOutCurrentUser(): Promise<void> {
@@ -235,9 +281,8 @@ export async function signInWithGoogleIdToken(idToken: string): Promise<User> {
       const linked = await FirebaseAuth.linkWithCredential(auth.currentUser, credential);
       return linked.user;
     } catch (error) {
-      if (!shouldFallbackToSignInAfterLinkFailure(getFirebaseErrorCode(error))) {
-        throw error;
-      }
+      throwIfCredentialCollision(error);
+      throw error;
     }
   }
 
@@ -264,3 +309,5 @@ export function subscribeToAuthState(
 
   return FirebaseAuth.onAuthStateChanged(auth, listener);
 }
+
+export { AuthUpgradeRequiresChoiceError };

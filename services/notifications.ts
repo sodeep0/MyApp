@@ -1,10 +1,10 @@
-import { getGoalRepository, getHabitRepository } from '@/repositories/factory';
 import {
   getNotificationSettings,
   updateNotificationSettings,
 } from '@/stores/notificationStore';
+import { getAllCompletions, getAllHabits } from '@/stores/habitStore';
+import { getAllGoals } from '@/stores/goalStore';
 import {
-  createDateWithTime,
   WEEKLY_REVIEW_WEEKDAY,
   goalNudgeCandidates,
   habitReminderCandidates,
@@ -231,14 +231,12 @@ export async function syncManagedNotificationsAsync(): Promise<number> {
 
   await cancelManagedNotificationsAsync();
 
-  const habitRepository = getHabitRepository();
-  const goalRepository = getGoalRepository();
   const now = new Date();
   let scheduledCount = 0;
 
   const [habits, goals] = await Promise.all([
-    habitRepository.getAllHabits(),
-    goalRepository.getAllGoals(),
+    getAllHabits(),
+    getAllGoals(),
   ]);
 
   if (settings.habitRemindersEnabled) {
@@ -263,6 +261,7 @@ export async function syncManagedNotificationsAsync(): Promise<number> {
   }
 
   if (settings.streakAlertsEnabled) {
+    const allCompletions = await getAllCompletions();
     const scheduled = await Promise.all(
       habits
         .filter(
@@ -271,8 +270,8 @@ export async function syncManagedNotificationsAsync(): Promise<number> {
         )
         .map(async (habit: Habit) => {
           try {
-            const completions = await habitRepository.getCompletionsForHabit(
-              habit.id,
+            const completions = allCompletions.filter(
+              (completion) => completion.habitId === habit.id,
             );
             return scheduleNotificationBestEffortAsync(
               scheduleId('streak-alert', habit.id),

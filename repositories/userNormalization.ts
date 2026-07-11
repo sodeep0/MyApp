@@ -14,6 +14,10 @@ export function normalizeUserProfile(value: unknown): UserProfile | null {
   const profile = value as Partial<UserProfile>;
   if (typeof profile.displayName !== 'string') return null;
 
+  const updatedAt = typeof (profile as { updatedAt?: unknown }).updatedAt === 'string'
+    ? (profile as { updatedAt: string }).updatedAt
+    : undefined;
+
   return {
     displayName: normalizeDisplayName(profile.displayName),
     email: typeof profile.email === 'string' ? profile.email : '',
@@ -21,6 +25,7 @@ export function normalizeUserProfile(value: unknown): UserProfile | null {
     bio: typeof profile.bio === 'string' ? profile.bio : '',
     onboardingCompleted: profile.onboardingCompleted === true,
     selectedIntentions: normalizeIntentions(profile.selectedIntentions),
+    ...(updatedAt ? { updatedAt } : {}),
   };
 }
 

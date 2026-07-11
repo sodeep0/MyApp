@@ -7,8 +7,11 @@ import {
 import type { UserRepository } from '@/repositories/interfaces/userRepository';
 import { userLocalRepository } from '@/repositories/local/userRepository.local';
 import { getCloudContext, stripUndefined, toIsoString, withUpdatedAt } from './common';
+import { createRefreshGuard } from './commonSync';
+import { pickNewerByUpdatedAt } from './mergeByUpdatedAt';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { enqueueSyncItem, flushSyncQueue, PermanentSyncItemError } from '@/services/sync/syncQueue';
+import { captureMessage } from '@/services/observability';
 
 function profileDocRef(uid: string): string {
   return `users/${uid}`;
@@ -61,7 +64,9 @@ export const userFirebaseRepository: UserRepository = {
     await userLocalRepository.saveUserProfile(normalizedProfile);
     const context = await getCloudContext();
     if (!context) {
-      await enqueueSyncItem('user', 'setProfile', normalizedProfile);
+      const stamped = withUpdatedAt({ ...normalizedProfile });
+      await userLocalRepository.saveUserProfile(stamped);
+      await enqueueSyncItem('user', 'setProfile', stamped);
       return;
     }
 
@@ -71,12 +76,24 @@ export const userFirebaseRepository: UserRepository = {
       createdAt: toIsoString(new Date()),
     });
 
+    await userLocalRepository.saveUserProfile({
+      ...normalizedProfile,
+      updatedAt: payload.updatedAt,
+    });
+
     const ref = doc(context.db, profileDocRef(context.uid));
     try {
       await setDoc(ref, stripUndefined(payload), { merge: true });
       await flushUserQueue();
-    } catch {
-      await enqueueSyncItem('user', 'setProfile', normalizedProfile);
+    } catch (error) {
+      captureMessage('user cloud write failed; enqueueing', 'warning', {
+        action: 'setProfile',
+        error: String(error),
+      });
+      await enqueueSyncItem('user', 'setProfile', {
+        ...normalizedProfile,
+        updatedAt: payload.updatedAt,
+      });
     }
   },
 
@@ -119,47 +136,38 @@ export const userFirebaseRepository: UserRepository = {
   },
 };
 
-let isRefreshingUserProfile = false;
-
-function runInBackground(task: () => Promise<void>): void {
-  void task().catch((error) => {
-    console.warn('User profile background sync task failed.', error);
-  });
-}
+const userProfileRefreshGuard = createRefreshGuard(
+  'User profile cloud refresh failed; keeping local cache.',
+);
 
 function refreshUserProfileFromCloudInBackground(): void {
-  if (isRefreshingUserProfile) return;
-  isRefreshingUserProfile = true;
+  userProfileRefreshGuard.run(async () => {
+    const context = await getCloudContext();
+    if (!context) return;
 
-  runInBackground(async () => {
-    try {
-      const context = await getCloudContext();
-      if (!context) return;
+    await flushUserQueue();
 
-      await flushUserQueue();
+    const ref = doc(context.db, profileDocRef(context.uid));
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
 
-      const ref = doc(context.db, profileDocRef(context.uid));
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return;
+    const data = snap.data();
+    const remoteProfile: UserProfile = {
+      displayName: typeof data.displayName === 'string' ? data.displayName : 'User',
+      email: typeof data.email === 'string' ? data.email : '',
+      avatar: typeof data.avatar === 'string' ? data.avatar : null,
+      bio: typeof data.bio === 'string' ? data.bio : '',
+      onboardingCompleted: data.onboardingCompleted === true,
+      selectedIntentions: normalizeSelectedIntentions(data.selectedIntentions),
+      updatedAt: data.updatedAt != null ? toIsoString(data.updatedAt) : undefined,
+    };
 
-      const data = snap.data();
-      const profile: UserProfile = {
-        displayName: typeof data.displayName === 'string' ? data.displayName : 'User',
-        email: typeof data.email === 'string' ? data.email : '',
-        avatar: typeof data.avatar === 'string' ? data.avatar : null,
-        bio: typeof data.bio === 'string' ? data.bio : '',
-        onboardingCompleted: data.onboardingCompleted === true,
-        selectedIntentions: normalizeSelectedIntentions(data.selectedIntentions),
-      };
+    const localProfile = await userLocalRepository.getUserProfile();
+    const profile = pickNewerByUpdatedAt(localProfile, remoteProfile) ?? remoteProfile;
 
-      await userLocalRepository.saveUserProfile(profile);
-      await userLocalRepository.updateDisplayName(profile.displayName);
-      await userLocalRepository.setOnboardingCompleted(profile.onboardingCompleted);
-      await userLocalRepository.saveSelectedIntentions(profile.selectedIntentions);
-    } catch (error) {
-      console.warn('User profile cloud refresh failed; keeping local cache.', error);
-    } finally {
-      isRefreshingUserProfile = false;
-    }
+    await userLocalRepository.saveUserProfile(profile);
+    await userLocalRepository.updateDisplayName(profile.displayName);
+    await userLocalRepository.setOnboardingCompleted(profile.onboardingCompleted);
+    await userLocalRepository.saveSelectedIntentions(profile.selectedIntentions);
   });
 }

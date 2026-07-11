@@ -360,7 +360,13 @@ test('habit repository deletes completions for deleted habits only', async () =>
   await habitLocalRepository.deleteHabit(deletedHabit.id);
 
   assert.deepEqual(await habitLocalRepository.getCompletionsForHabit(deletedHabit.id), []);
-  assert.deepEqual(await habitLocalRepository.getCompletionsForHabit(keptHabit.id), [completions[1]]);
+  assert.deepEqual(
+    await habitLocalRepository.getCompletionsForHabit(keptHabit.id),
+    [{
+      ...completions[1],
+      updatedAt: completions[1].completedAt,
+    }],
+  );
 });
 
 test('habit repository ignores malformed persisted habits and completions before domain operations', async () => {
@@ -479,7 +485,10 @@ test('habit repository rejects blank delete ids before persisting', async () => 
     (await habitLocalRepository.getAllHabits()).map((storedHabit) => storedHabit.id),
     [habit.id],
   );
-  assert.deepEqual(await habitLocalRepository.getCompletionsForHabit(habit.id), [completion]);
+  assert.deepEqual(
+    await habitLocalRepository.getCompletionsForHabit(habit.id),
+    [{ ...completion, updatedAt: completion.completedAt }],
+  );
 });
 
 test('habit repository rejects blank unmark ids before persisting', async () => {
@@ -502,7 +511,10 @@ test('habit repository rejects blank unmark ids before persisting', async () => 
     /Habit id must be a non-empty string/,
   );
 
-  assert.deepEqual(await habitLocalRepository.getCompletionsForHabit(habit.id), [completion]);
+  assert.deepEqual(
+    await habitLocalRepository.getCompletionsForHabit(habit.id),
+    [{ ...completion, updatedAt: completion.completedAt }],
+  );
 });
 
 test('habit normalization treats non-array persisted values as empty', () => {
@@ -643,11 +655,15 @@ test('firebase delete paths validate ids before local mutation and sync enqueue'
     'repositories/firebase/habitRepository.firebase.ts',
   ];
 
+  const commonSync = readProjectFile('repositories/firebase/commonSync.ts');
+  assert.match(commonSync, /export function requireQueuedId/);
+  assert.match(commonSync, /return payload\.trim\(\);/);
+
   for (const file of files) {
     const source = readProjectFile(file);
     assert.match(source, /function requireRepositoryId\(id: string, label: string\): string/);
     assert.match(source, /id must be a non-empty string/);
-    assert.match(source, /return payload\.trim\(\);/);
+    assert.match(source, /requireQueuedId/);
     assert.match(source, /const normalizedId = requireRepositoryId/);
   }
 

@@ -1,7 +1,13 @@
 // Bad habit & urge event store (local-only by policy; never sync to Firebase)
 import type { BadHabit, UrgeEvent } from '../types/models';
-import { normalizeBadHabits, normalizeUrgeEvents } from './badHabitEntryNormalization';
+import {
+  normalizeBadHabit,
+  normalizeBadHabits,
+  normalizeUrgeEvent,
+  normalizeUrgeEvents,
+} from './badHabitEntryNormalization';
 import { generateUUID } from '@/utils/id';
+import { invalidate } from '@/stores/invalidate';
 import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
 import { getSensitiveItem, setSensitiveItem } from '@/storage/secureDataStorage';
 export {
@@ -38,6 +44,7 @@ export async function saveBadHabits(habits: BadHabit[]): Promise<void> {
     legacyKey: BAD_HABITS_KEY,
     value: normalizeBadHabits(habits),
   });
+  invalidate('badHabits');
 }
 
 export async function addBadHabit(
@@ -46,11 +53,14 @@ export async function addBadHabit(
   await enforceCountLimitedFeatureGate('badHabits', countActiveBadHabits);
 
   const habits = await getAllBadHabits();
-  const newHabit: BadHabit = {
+  const newHabit = normalizeBadHabit({
     ...data,
     id: generateUUID(),
     createdAt: new Date().toISOString(),
-  };
+  });
+  if (!newHabit) {
+    throw new Error('Invalid bad habit payload.');
+  }
   await saveBadHabits([...habits, newHabit]);
   return newHabit;
 }
@@ -59,7 +69,10 @@ export async function updateBadHabit(id: string, updates: Partial<BadHabit>): Pr
   const habits = await getAllBadHabits();
   const idx = habits.findIndex((h) => h.id === id);
   if (idx === -1) return null;
-  habits[idx] = { ...habits[idx], ...updates };
+  const merged = { ...habits[idx], ...updates, id: habits[idx].id };
+  const normalized = normalizeBadHabit(merged);
+  if (!normalized) return null;
+  habits[idx] = normalized;
   await saveBadHabits(habits);
   return habits[idx];
 }
@@ -98,11 +111,19 @@ export async function saveUrgeEvents(events: UrgeEvent[]): Promise<void> {
     legacyKey: URGE_EVENTS_KEY,
     value: normalizeUrgeEvents(events),
   });
+  invalidate('badHabits');
 }
 
 export async function logUrgeEvent(data: Omit<UrgeEvent, 'id' | 'loggedAt'>): Promise<UrgeEvent> {
   const all = await getAllUrgeEvents();
-  const event: UrgeEvent = { ...data, id: generateUUID(), loggedAt: new Date().toISOString() };
+  const event = normalizeUrgeEvent({
+    ...data,
+    id: generateUUID(),
+    loggedAt: new Date().toISOString(),
+  });
+  if (!event) {
+    throw new Error('Invalid urge event payload.');
+  }
   await saveUrgeEvents([...all, event]);
   return event;
 }

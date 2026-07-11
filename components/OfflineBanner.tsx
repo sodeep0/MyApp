@@ -1,21 +1,15 @@
 import { Colors, Shapes, Shadows, Spacing, Typography } from '@/constants/theme';
+import { isOfflineNetworkState } from '@/services/sync/networkState';
 import { useNetworkState } from 'expo-network';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function isOffline(
-  isConnected: boolean | null | undefined,
-  isInternetReachable: boolean | null | undefined,
-): boolean {
-  return isConnected === false || isInternetReachable === false;
-}
-
 export function OfflineBanner() {
   const insets = useSafeAreaInsets();
   const networkState = useNetworkState();
 
-  if (!isOffline(networkState.isConnected, networkState.isInternetReachable)) {
+  if (!isOfflineNetworkState(networkState)) {
     return null;
   }
 

@@ -1,7 +1,8 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,10 +26,14 @@ import {
 } from "@/hooks/useGoogleAuthRequest";
 import { useAuthSession } from "@/hooks/useAuthSession";
 import {
+  AuthUpgradeRequiresChoiceError,
+  continueCreateAccountSignIn,
+  continueWithExistingGoogleAccount,
   createAccountWithEmailPassword,
   signInWithGoogleIdToken,
 } from "@/services/firebase/auth";
 import { persistSignedInIdentity } from "@/stores/userStore";
+import type { User } from "firebase/auth";
 
 function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -53,6 +58,29 @@ function getCreateAccountErrorMessage(error: unknown): string {
   }
 }
 
+function isAuthUpgradeChoiceError(error: unknown): boolean {
+  return (
+    error instanceof AuthUpgradeRequiresChoiceError
+    || (typeof error === "object"
+      && error !== null
+      && "name" in error
+      && (error as { name: string }).name === "AuthUpgradeRequiresChoiceError")
+  );
+}
+
+function confirmContinueWithExistingAccount(): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      "Account already exists",
+      "Continue with existing account (guest cloud data won't transfer)?",
+      [
+        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+        { text: "Continue", onPress: () => resolve(true) },
+      ],
+    );
+  });
+}
+
 export default function CreateAccountScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -73,6 +101,19 @@ export default function CreateAccountScreen() {
     }
   }, [authLoading, isAuthenticated, router]);
 
+  const finishSignedIn = useCallback(async (
+    user: User,
+    fallbackEmail = "",
+    fallbackName = "",
+  ) => {
+    await persistSignedInIdentity({
+      email: user.email ?? fallbackEmail,
+      displayName:
+        user.displayName || fallbackName || user.email?.split("@")[0] || "User",
+    });
+    router.replace("/(tabs)" as any);
+  }, [router]);
+
   useEffect(() => {
     const completeSignUp = async () => {
       if (!response) return;
@@ -86,14 +127,21 @@ export default function CreateAccountScreen() {
         const idToken = extractGoogleIdToken(response);
         if (!idToken) throw new Error("Missing ID token");
 
-        const user = await signInWithGoogleIdToken(idToken);
+        let user: User;
+        try {
+          user = await signInWithGoogleIdToken(idToken);
+        } catch (nextError) {
+          if (!isAuthUpgradeChoiceError(nextError)) {
+            throw nextError;
+          }
+          const confirmed = await confirmContinueWithExistingAccount();
+          if (!confirmed) {
+            return;
+          }
+          user = await continueWithExistingGoogleAccount(idToken);
+        }
 
-        await persistSignedInIdentity({
-          email: user.email ?? "",
-          displayName: user.displayName || user.email?.split("@")[0] || "User",
-        });
-
-        router.replace("/(tabs)" as any);
+        await finishSignedIn(user);
       } catch {
         setError("Google sign-up failed.");
       } finally {
@@ -102,7 +150,7 @@ export default function CreateAccountScreen() {
     };
 
     completeSignUp();
-  }, [response, router]);
+  }, [response, finishSignedIn]);
 
   const handleGoogle = async () => {
     if (!hasGoogleConfig) {
@@ -144,19 +192,25 @@ export default function CreateAccountScreen() {
     setSubmitting(true);
 
     try {
-      const user = await createAccountWithEmailPassword(
-        normalizedEmail,
-        password,
-        trimmedName || undefined,
-      );
+      let user: User;
+      try {
+        user = await createAccountWithEmailPassword(
+          normalizedEmail,
+          password,
+          trimmedName || undefined,
+        );
+      } catch (nextError) {
+        if (!isAuthUpgradeChoiceError(nextError)) {
+          throw nextError;
+        }
+        const confirmed = await confirmContinueWithExistingAccount();
+        if (!confirmed) {
+          return;
+        }
+        user = await continueCreateAccountSignIn(normalizedEmail, password);
+      }
 
-      await persistSignedInIdentity({
-        email: user.email ?? normalizedEmail,
-        displayName:
-          user.displayName || trimmedName || user.email?.split("@")[0] || "User",
-      });
-
-      router.replace("/(tabs)" as any);
+      await finishSignedIn(user, normalizedEmail, trimmedName);
     } catch (nextError) {
       setError(getCreateAccountErrorMessage(nextError));
     } finally {
@@ -167,7 +221,11 @@ export default function CreateAccountScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={() => router.back()}
+        >
           <Ionicons name="arrow-back" size={24} color={Colors.TextPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Create Account</Text>
@@ -191,6 +249,7 @@ export default function CreateAccountScreen() {
               autoCapitalize="words"
               autoCorrect={false}
               editable={!submitting}
+              accessibilityLabel="Display name"
             />
           </View>
 
@@ -207,6 +266,7 @@ export default function CreateAccountScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!submitting}
+              accessibilityLabel="Email"
             />
           </View>
 
@@ -223,6 +283,7 @@ export default function CreateAccountScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!submitting}
+              accessibilityLabel="Password"
             />
           </View>
 
@@ -239,6 +300,7 @@ export default function CreateAccountScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!submitting}
+              accessibilityLabel="Confirm password"
               onSubmitEditing={() => {
                 void handleCreateAccount();
               }}

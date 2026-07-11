@@ -35,11 +35,12 @@ test('data export service does not import Firebase or write to storage', () => {
   assert.doesNotMatch(source, /save[A-Za-z]+\(/);
 });
 
-test('data export tolerates per-habit completion failures with explicit warnings', () => {
+test('data export loads completions in one batched read with failure warning', () => {
   const source = readProjectFile('services/dataExport.ts');
 
-  assert.match(source, /Promise\.allSettled/);
-  assert.match(source, /Habit completions for \$\{habitId\} could not be included/);
+  assert.match(source, /getAllCompletions/);
+  assert.match(source, /Habit completions could not be included/);
+  assert.doesNotMatch(source, /getCompletionsForHabit/);
   assert.doesNotMatch(source, /Promise\.all\(\s*habits\.map/);
 });
 

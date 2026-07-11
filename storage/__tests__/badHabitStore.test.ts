@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { normalizeBadHabits, normalizeUrgeEvents } from '../../stores/badHabitEntryNormalization';
+import { normalizeBadHabit, normalizeBadHabits, normalizeUrgeEvent, normalizeUrgeEvents } from '../../stores/badHabitEntryNormalization';
 import {
   BadHabitCategory,
   BadHabitSeverity,
@@ -79,4 +79,30 @@ test('bad-habit writes normalize sensitive local data before persistence', () =>
 
   assert.match(source, /value: normalizeBadHabits\(habits\)/);
   assert.match(source, /value: normalizeUrgeEvents\(events\)/);
+  assert.match(source, /normalizeBadHabit\(merged\)/);
+});
+
+test('bad-habit and urge normalization enforce field bounds', () => {
+  const habit = normalizeBadHabit({
+    ...badHabit('bound', '2026-05-01'),
+    name: 'n'.repeat(200),
+    notes: 'z'.repeat(6_000),
+  });
+  assert.ok(habit);
+  assert.equal(habit!.name.length, 120);
+  assert.equal(habit!.notes?.length, 5_000);
+
+  assert.equal(
+    normalizeBadHabit({ id: '', quitDate: '2026-05-01', name: 'x', category: BadHabitCategory.DIGITAL, severity: BadHabitSeverity.MILD }),
+    null,
+  );
+
+  const urge = normalizeUrgeEvent({
+    ...urgeEvent('u1', 'h1', '2026-05-01T10:00:00.000Z'),
+    note: 'n'.repeat(3_000),
+    triggerTag: 't'.repeat(80),
+  });
+  assert.ok(urge);
+  assert.equal(urge!.note?.length, 2_000);
+  assert.equal(urge!.triggerTag?.length, 40);
 });

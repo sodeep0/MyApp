@@ -3,6 +3,7 @@ import { Button } from '@/components/Button';
 import { LoadingState } from '@/components/LoadingState';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Colors, Spacing, Typography } from '@/constants/theme';
+import { initObservability, captureException } from '@/services/observability';
 import { isFirebaseConfigured } from '@/services/firebase/app';
 import { ensureAnonymousAuth } from '@/services/firebase/auth';
 import { initializeJournalSecurityLifecycle } from '@/services/journalSecurity';
@@ -86,10 +87,11 @@ export default function RootLayout() {
     let bootstrapSucceeded = false;
 
     try {
+      await initObservability();
       await ensureAnonymousAuth();
       bootstrapSucceeded = true;
     } catch (error) {
-      console.error('Failed to bootstrap app shell', error);
+      captureException(error, { phase: 'bootstrap' });
       setBootstrapError('Kaarma could not finish starting up.');
     } finally {
       setBootstrapping(false);

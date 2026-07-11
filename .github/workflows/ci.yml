@@ -4,6 +4,12 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_firestore_rules:
+        description: 'Deploy Firestore rules to the linked Firebase project (requires secrets)'
+        type: boolean
+        default: false
 
 jobs:
   quality:
@@ -18,3 +24,45 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: npm run test:storage
+      - run: npm audit --audit-level=high
+        continue-on-error: true
+
+  # Firestore rules checks. Static policy assertions always run.
+  # Emulator-backed owner-isolation cases in firestoreRules.emulator.test.ts
+  # skip when FIRESTORE_EMULATOR_HOST is unset (default CI / no secrets).
+  firestore-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Rules tests (emulator cases skip without FIRESTORE_EMULATOR_HOST)
+        run: npm run test:rules
+
+  # Optional production deploy — enable a GitHub Environment named "production"
+  # with required reviewers, then set FIREBASE_TOKEN (or use google-github-actions/auth).
+  # Uncomment the `environment: production` line once that environment exists.
+  deploy-firestore-rules:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_firestore_rules == true
+    runs-on: ubuntu-latest
+    # environment: production
+    needs: [quality, firestore-rules]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Deploy Firestore rules
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "FIREBASE_TOKEN secret is required for firebase deploy."
+            exit 1
+          fi
+          npx firebase-tools deploy --only firestore:rules --non-interactive

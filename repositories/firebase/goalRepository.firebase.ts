@@ -13,7 +13,10 @@ import { normalizeGoals } from '@/repositories/goalNormalization';
 import type { GoalRepository } from '@/repositories/interfaces/goalRepository';
 import { goalLocalRepository } from '@/repositories/local/goalRepository.local';
 import { enqueueSyncItem, flushSyncQueue, PermanentSyncItemError } from '@/services/sync/syncQueue';
-import { getCloudContext, stripUndefined } from './common';
+import { captureMessage } from '@/services/observability';
+import { getCloudContext, stripUndefined, toIsoString } from './common';
+import { createRefreshGuard, requireQueuedId } from './commonSync';
+import { mergeByUpdatedAt } from './mergeByUpdatedAt';
 
 function goalsPath(uid: string): string {
   return `users/${uid}/goals`;
@@ -36,13 +39,6 @@ function requireQueuedGoal(payload: unknown): Goal {
     throw new PermanentSyncItemError('queued goal payload is invalid');
   }
   return goal;
-}
-
-function requireQueuedId(payload: unknown, label: string): string {
-  if (typeof payload !== 'string' || payload.trim().length === 0) {
-    throw new PermanentSyncItemError(`queued ${label} id is invalid`);
-  }
-  return payload.trim();
 }
 
 function requireRepositoryId(id: string, label: string): string {
@@ -71,33 +67,29 @@ export async function flushGoalQueue(): Promise<void> {
   });
 }
 
-let isRefreshingGoals = false;
-
-function runInBackground(task: () => Promise<void>): void {
-  void task().catch((error) => {
-    console.warn('Goals background sync task failed.', error);
-  });
-}
+const goalsRefreshGuard = createRefreshGuard('Goals cloud refresh failed; keeping local cache.');
 
 function refreshGoalsFromCloudInBackground(): void {
-  if (isRefreshingGoals) return;
-  isRefreshingGoals = true;
+  goalsRefreshGuard.run(async () => {
+    const context = await getCloudContext();
+    if (!context) return;
 
-  runInBackground(async () => {
-    try {
-      const context = await getCloudContext();
-      if (!context) return;
-
-      await flushGoalQueue();
-      const q = query(collection(context.db, goalsPath(context.uid)), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
-      const goals = normalizeGoals(snap.docs.map((d) => d.data()));
-      await goalLocalRepository.saveGoals(goals);
-    } catch (error) {
-      console.warn('Goals cloud refresh failed; keeping local cache.', error);
-    } finally {
-      isRefreshingGoals = false;
-    }
+    await flushGoalQueue();
+    const q = query(collection(context.db, goalsPath(context.uid)), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    const remoteGoals = normalizeGoals(
+      snap.docs.map((d) => {
+        const data = d.data() as Record<string, unknown>;
+        return {
+          ...data,
+          createdAt: typeof data.createdAt === 'string' ? data.createdAt : toIsoString(data.createdAt),
+          updatedAt: data.updatedAt != null ? toIsoString(data.updatedAt) : undefined,
+        };
+      }),
+    ) as Array<Goal & { updatedAt?: string | null }>;
+    const localGoals = (await goalLocalRepository.getAllGoals()) as Array<Goal & { updatedAt?: string | null }>;
+    const mergedGoals = mergeByUpdatedAt(localGoals, remoteGoals);
+    await goalLocalRepository.saveGoals(mergedGoals);
   });
 }
 
@@ -127,7 +119,11 @@ export const goalFirebaseRepository: GoalRepository = {
     for (const goal of normalizedGoals) {
       try {
         await setGoalInCloud(context.uid, context.db, goal);
-      } catch {
+      } catch (error) {
+        captureMessage('goals cloud write failed; enqueueing', 'warning', {
+          action: 'setGoal',
+          error: String(error),
+        });
         await enqueueSyncItem('goals', 'setGoal', goal);
       }
     }
@@ -145,7 +141,11 @@ export const goalFirebaseRepository: GoalRepository = {
     try {
       await setGoalInCloud(context.uid, context.db, added);
       await flushGoalQueue();
-    } catch {
+    } catch (error) {
+      captureMessage('goals cloud write failed; enqueueing', 'warning', {
+        action: 'setGoal',
+        error: String(error),
+      });
       await enqueueSyncItem('goals', 'setGoal', added);
     }
     return added;
@@ -163,7 +163,11 @@ export const goalFirebaseRepository: GoalRepository = {
     try {
       await setGoalInCloud(context.uid, context.db, updated);
       await flushGoalQueue();
-    } catch {
+    } catch (error) {
+      captureMessage('goals cloud write failed; enqueueing', 'warning', {
+        action: 'setGoal',
+        error: String(error),
+      });
       await enqueueSyncItem('goals', 'setGoal', updated);
     }
     return updated;
@@ -181,7 +185,11 @@ export const goalFirebaseRepository: GoalRepository = {
     try {
       await deleteGoalInCloud(context.uid, context.db, normalizedId);
       await flushGoalQueue();
-    } catch {
+    } catch (error) {
+      captureMessage('goals cloud write failed; enqueueing', 'warning', {
+        action: 'deleteGoal',
+        error: String(error),
+      });
       await enqueueSyncItem('goals', 'deleteGoal', normalizedId);
     }
   },

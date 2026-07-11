@@ -10,7 +10,10 @@ function readProjectFile(path: string): string {
 }
 
 test('screen-time dashboard routes focus and blocking through shared premium gates', () => {
-  const source = readProjectFile('app/(tabs)/screen-time/index.tsx');
+  const source = [
+    readProjectFile('app/(tabs)/screen-time/index.tsx'),
+    readProjectFile('components/screen-time/FocusPanel.tsx'),
+  ].join('\n');
 
   assert.match(source, /import \{ PremiumLockedBanner \}/);
   assert.match(source, /import \{ getPremiumFeatureGate \}/);
@@ -22,15 +25,19 @@ test('screen-time dashboard routes focus and blocking through shared premium gat
 });
 
 test('free users cannot start focus sessions or toggle app blocking directly', () => {
-  const source = readProjectFile('app/(tabs)/screen-time/index.tsx');
+  const dashboard = readProjectFile('app/(tabs)/screen-time/index.tsx');
+  const focusPanel = readProjectFile('components/screen-time/FocusPanel.tsx');
+  const blockedPanel = readProjectFile('components/screen-time/BlockedAppsPanel.tsx');
 
+  assert.match(dashboard, /<FocusPanel[\s\S]*locked=\{focusSessionsGate\.locked\}/);
+  assert.match(dashboard, /<BlockedAppsPanel[\s\S]*locked=\{appBlockingGate\.locked\}/);
   assert.match(
-    source,
-    /focusSessionsGate\.locked\s*\?\s*handlePremiumUpgrade\s*:\s*\(\) => handleStartFocus\(duration\.minutes\)/,
+    focusPanel,
+    /locked\s*\?\s*onPremiumUpgrade\s*:\s*\(\) => onStartFocus\(duration\.minutes\)/,
   );
   assert.match(
-    source,
-    /if \(!appBlockingGate\.locked\) {\s*toggleBlockedApp\(app\.packageName\);\s*return;\s*}\s*handlePremiumUpgrade\(\);/,
+    blockedPanel,
+    /if \(!locked\) {\s*onToggleBlocked\(app\.packageName\);\s*return;\s*}\s*onPremiumUpgrade\(\);/,
   );
 });
 

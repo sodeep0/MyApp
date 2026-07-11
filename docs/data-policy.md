@@ -10,14 +10,14 @@ This document is the source of truth for where each Kaarma module is stored in t
 - UI screens must not talk directly to Firebase; they go through stores/repositories (see intentional exceptions below).
 - Phase 1 cloud modules are Profile, Habits, Goals, and Activity.
 - Phase 1 auth supports guest/local-first use plus Firebase auth for signed-in cloud-eligible modules.
-- Conflict policy for successful cloud pulls: **cloud snapshot wins on pull**. Local cache is the source of truth for UI until a pull succeeds. Offline writes enqueue to the sync queue and flush when connectivity returns. Per-entity `updatedAt` LWW merge is not implemented in this MVP phase.
+- Conflict policy for successful cloud pulls: **per-entity `updatedAt` last-write-wins (LWW) merge**. Local and remote lists are unioned by id; the entity with the later ISO `updatedAt` wins. Equal or both-missing timestamps prefer remote. Local cache remains the source of truth for UI until a pull succeeds. Offline writes enqueue to the sync queue and flush when connectivity returns. Habit completions sync with habits via the same LWW rules (`users/{uid}/habits/{habitId}/completions/{completionId}`).
 
 ## Module Storage Matrix
 
 | Module | Storage | Sync | Notes |
 | --- | --- | --- | --- |
-| User/Profile | Local cache + Firestore | Yes | Local-first reads; background cloud refresh overwrites local on success |
-| Habits | Local cache + Firestore | Yes | Includes completions; apply free-tier history logic client-side |
+| User/Profile | Local cache + Firestore | Yes | Local-first reads; background cloud refresh merges via `pickNewerByUpdatedAt` |
+| Habits | Local cache + Firestore | Yes | Includes completions; LWW merge on pull; apply free-tier history logic client-side |
 | Goals | Local cache + Firestore | Yes | Active-goal free-tier limit enforced in repository domain layer |
 | Activity Log | Local cache + Firestore | Yes | Sync when online; queue writes when offline |
 | Journal | Local only (encrypted local store) | No | Always private, never synced or shared |
@@ -36,10 +36,11 @@ This document is the source of truth for where each Kaarma module is stored in t
 
 These cross-cutting paths may bypass Screen → Store for MVP maintainability:
 
-- **Notifications** (`services/notifications.ts`) may read habit/goal repositories directly when scheduling managed reminders.
 - **Screen time** UI uses `services/screenTimeService` / `screenTimeState` (AsyncStorage-backed), not a domain store/repository.
 - **Privacy reset** may call `storage/secureDataStorage` reset helpers directly (orchestrated from profile privacy UI / data management).
 - **Auth bootstrap / sync flush** live in app shell services, not per-screen stores.
+
+Notifications (`services/notifications.ts`) schedule managed reminders through **store APIs only** (`habitStore` / `goalStore`), not repositories.
 
 ## Security and Privacy Constraints
 
@@ -60,4 +61,4 @@ These cross-cutting paths may bypass Screen → Store for MVP maintainability:
 
 - Harden sensitive-data key lifecycle (rotation/recovery policy) for encrypted local storage.
 - Add export tooling that keeps local-only modules local unless user explicitly exports.
-- Optional per-entity LWW merge if multi-device conflict rate warrants it.
+- Soft-delete (`isDeleted`) exclusion on LWW merge if multi-device tombstones are introduced.

@@ -175,7 +175,7 @@ test('routeForNotificationData maps managed notification payloads to existing ro
       scope: 'kaarma',
       type: 'weekly-review',
     }),
-    '/(tabs)',
+    '/(tabs)?review=weekly',
   );
 });
 

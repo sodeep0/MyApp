@@ -99,6 +99,7 @@ export interface Habit {
   createdAt: string;                         // ISO timestamp
   isArchived: boolean;
   streakShieldsRemaining: number;            // premium only, default 0
+  updatedAt?: string;                        // ISO timestamp; LWW sync for cloud habits
 }
 
 export interface HabitCompletion {
@@ -106,6 +107,7 @@ export interface HabitCompletion {
   habitId: string;
   completedDate: string;                     // ISO date "YYYY-MM-DD"
   completedAt: string;                       // ISO timestamp
+  updatedAt?: string;                        // ISO timestamp; LWW sync (defaults to completedAt)
 }
 
 // ─── Bad Habit ──────────────────────────────────────────────────────────────
@@ -234,6 +236,7 @@ export interface UserProfile {
   bio: string;
   onboardingCompleted: boolean;
   selectedIntentions: Intention[];
+  updatedAt?: string;                        // ISO timestamp; LWW sync for cloud profile
 }
 
 // ─── Social (premium) ───────────────────────────────────────────────────────

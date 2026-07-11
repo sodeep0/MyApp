@@ -170,6 +170,7 @@ export default function AddEditHabitScreen() {
         }
       } catch (error) {
         console.error("Failed to load habit:", error);
+        Alert.alert("Error", "Failed to load habit. Please go back and try again.");
       } finally {
         setIsLoading(false);
       }

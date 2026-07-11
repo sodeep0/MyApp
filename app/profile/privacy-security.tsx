@@ -29,6 +29,8 @@ import {
   getSensitiveDataRecoveryState,
   resetSensitiveDataStorage,
 } from '@/storage/secureDataStorage';
+import { getSyncDropStats, type SyncDropStats } from '@/services/sync/syncQueue';
+import { isFirebaseConfigured } from '@/services/firebase/app';
 
 const UNLOCK_TIMEOUT_OPTIONS = [1, 5, 15] as const;
 
@@ -42,12 +44,20 @@ export default function PrivacySecurityScreen() {
   const [recoveryKeys, setRecoveryKeys] = useState<string[]>([]);
   const [recoveryDetectedAt, setRecoveryDetectedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncStats, setSyncStats] = useState<SyncDropStats>({
+    count: 0,
+    lastDroppedAt: null,
+    lastModule: null,
+    lastAction: null,
+  });
+  const [syncRetryBusy, setSyncRetryBusy] = useState(false);
 
   const loadState = useCallback(async () => {
-    const [nextSettings, capability, recoveryState] = await Promise.all([
+    const [nextSettings, capability, recoveryState, nextSyncStats] = await Promise.all([
       getSecuritySettings(),
       getJournalLockCapability(),
       getSensitiveDataRecoveryState(),
+      getSyncDropStats(),
     ]);
 
     setSettings(nextSettings);
@@ -55,6 +65,7 @@ export default function PrivacySecurityScreen() {
     setIsEnrolled(capability.isEnrolled);
     setRecoveryKeys(recoveryState.corruptedKeys);
     setRecoveryDetectedAt(recoveryState.lastDetectedAt);
+    setSyncStats(nextSyncStats);
     setLoading(false);
   }, []);
 
@@ -148,6 +159,40 @@ export default function PrivacySecurityScreen() {
     );
   }, []);
 
+  const handleRetrySync = useCallback(async () => {
+    if (!isFirebaseConfigured()) {
+      Alert.alert('Sync unavailable', 'Cloud sync is not configured on this build.');
+      return;
+    }
+    setSyncRetryBusy(true);
+    try {
+      const [
+        { flushUserQueue },
+        { flushHabitQueue },
+        { flushGoalQueue },
+        { flushActivityQueue },
+      ] = await Promise.all([
+        import('@/repositories/firebase/userRepository.firebase'),
+        import('@/repositories/firebase/habitRepository.firebase'),
+        import('@/repositories/firebase/goalRepository.firebase'),
+        import('@/repositories/firebase/activityRepository.firebase'),
+      ]);
+      await Promise.allSettled([
+        flushUserQueue(),
+        flushHabitQueue(),
+        flushGoalQueue(),
+        flushActivityQueue(),
+      ]);
+      const nextSyncStats = await getSyncDropStats();
+      setSyncStats(nextSyncStats);
+      Alert.alert('Sync retry finished', 'Pending cloud writes were flushed when possible.');
+    } catch {
+      Alert.alert('Sync retry failed', 'Could not flush the sync queue. Try again later.');
+    } finally {
+      setSyncRetryBusy(false);
+    }
+  }, []);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -183,6 +228,8 @@ export default function PrivacySecurityScreen() {
               <Switch
                 value={settings.journalLockEnabled}
                 onValueChange={handleToggleJournalLock}
+                accessibilityLabel="Journal lock"
+                accessibilityState={{ checked: settings.journalLockEnabled }}
                 trackColor={{ false: Colors.BorderSubtle, true: Colors.SteelBlue + '88' }}
                 thumbColor={settings.journalLockEnabled ? Colors.SteelBlue : Colors.Surface}
               />
@@ -229,6 +276,8 @@ export default function PrivacySecurityScreen() {
                     onValueChange={(value) => {
                       void applySettingsUpdate({ relockOnBackground: value });
                     }}
+                    accessibilityLabel="Relock when app goes to background"
+                    accessibilityState={{ checked: settings.relockOnBackground }}
                     trackColor={{ false: Colors.BorderSubtle, true: Colors.SteelBlue + '88' }}
                     thumbColor={settings.relockOnBackground ? Colors.SteelBlue : Colors.Surface}
                   />
@@ -267,6 +316,41 @@ export default function PrivacySecurityScreen() {
                 </Text>
               </View>
             </View>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.cardHeaderLeft}>
+              <View style={styles.iconWrap}>
+                <Ionicons name="cloud-outline" size={18} color={Colors.SteelBlue} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Sync status</Text>
+                <Text style={styles.cardDescription}>
+                  Dropped sync items: {syncStats.count}
+                  {syncStats.lastDroppedAt
+                    ? ` · Last drop ${new Date(syncStats.lastDroppedAt).toLocaleString('en-US')}`
+                    : ' · No drops recorded'}
+                </Text>
+                {syncStats.lastModule ? (
+                  <Text style={styles.helperText}>
+                    Last module: {syncStats.lastModule}
+                    {syncStats.lastAction ? ` (${syncStats.lastAction})` : ''}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            <Pressable
+              style={styles.unlockCheckButton}
+              onPress={() => void handleRetrySync()}
+              disabled={syncRetryBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Retry sync"
+            >
+              <Ionicons name="refresh-outline" size={14} color={Colors.SteelBlue} />
+              <Text style={styles.unlockCheckText}>
+                {syncRetryBusy ? 'Retrying sync…' : 'Retry sync'}
+              </Text>
+            </Pressable>
           </View>
 
           {(recoveryKeys.length > 0 || recoveryDetectedAt) && (

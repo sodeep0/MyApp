@@ -33,9 +33,9 @@ What is still incomplete:
 
 - premium enforcement
 - hardened key lifecycle/recovery strategy for encryption
-- notification delivery QA and deep-link handling
+- notification delivery QA (deep-link map is documented below; device QA pending)
 - account/cloud deletion native QA
-- release hardening and test coverage
+- release hardening and broader UI/E2E coverage
 - full app blocking/scheduling behavior
 - manual MVP QA checklist items have not all been run yet
 
@@ -91,7 +91,15 @@ For Android native builds, copy [`google-services.json.example`](./google-servic
 
 Journal and bad-habit encryption require native SecureStore (iOS/Android). Web builds fail closed for those sensitive modules.
 
-Optional Firebase App Check: set `EXPO_PUBLIC_FIREBASE_APP_CHECK=true` and configure providers in the Firebase console (web also needs `EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY`).
+Optional Firebase App Check: set `EXPO_PUBLIC_FIREBASE_APP_CHECK=true` to initialize App Check.
+
+- **Web:** also set `EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY` (reCAPTCHA v3 site key).
+- **Native (dev):** set `EXPO_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN` so the JS SDK can use a `CustomProvider` debug token. For production native attestation, prefer `@react-native-firebase/app-check` with Play Integrity / DeviceCheck.
+- **Console:** in Firebase Console → App Check, register the app providers, then enforce App Check on Auth/Firestore/etc. only after tokens are issuing successfully. Until then keep enforcement off to avoid locking out clients.
+
+Journal / bad-habit local envelopes use AES-256-GCM (v3). Legacy v1/v2 CBC payloads still decrypt; the next write upgrades them to v3.
+
+Optional Sentry crash reporting: set `EXPO_PUBLIC_SENTRY_DSN` to enable; leave empty for console-only observability (`services/observability.ts`).
 
 3. Start the app
 
@@ -119,6 +127,24 @@ npm run firebase:indexes:deploy
 ```
 
 EAS build profiles are defined in `eas.json` for development, internal preview, and production builds. Production credentials, store metadata, and native-device QA still need to be finalized before release.
+
+## Deep links and notification routes
+
+Managed local notifications (`services/notificationScheduling.ts` → `routeForNotificationData`) open these routes:
+
+| Notification type | Route |
+| --- | --- |
+| `habit-reminder` | `/habits/detail?id={habitId}` |
+| `streak-alert` | `/habits/detail?id={habitId}` |
+| `goal-deadline` | `/goals/detail?id={goalId}` |
+| `weekly-review` | `/(tabs)?review=weekly` (Home tab; query marks weekly-review entry) |
+
+Profile entry:
+
+- Home header avatar → `/profile`
+- Habits, Goals, Track, and Screen Time headers also expose the same profile affordance (`ProfileHeaderButton`)
+
+Other useful in-app routes (not notification-driven): `/profile/notifications`, `/profile/privacy-security`, journal and bad-habit detail routes under Track.
 
 ## Development Notes
 

@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ScrollView, Pressable, InteractionManager } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LoadingState } from '@/components/LoadingState';
 import { PremiumLockedBanner } from '@/components/PremiumLockedBanner';
+import { ProfileHeaderButton } from '@/components/ProfileHeaderButton';
 import { CommonStyles } from '@/constants/commonStyles';
 import { getCountLimitedFeatureGate } from '@/constants/featureLimits';
 import { Colors, Spacing, Typography, Shapes } from '@/constants/theme';
@@ -15,7 +16,7 @@ import {
   GoalStatus,
 } from '@/types/models';
 import { getAllGoals } from '@/stores/goalStore';
-
+import { subscribe } from '@/stores/invalidate';
 function getDateString() {
   return new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -38,12 +39,17 @@ export default function GoalListScreen() {
   const [activeTab, setActiveTab] = useState<FilterTab>(GoalStatus.ACTIVE);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getAllGoals();
       setGoals(data);
+    } catch (error) {
+      console.warn('Goals failed to load.', error);
+      setLoadError('Could not load goals. Try again.');
     } finally {
       setLoading(false);
     }
@@ -60,6 +66,12 @@ export default function GoalListScreen() {
       };
     }, [loadData]),
   );
+
+  useEffect(() => {
+    return subscribe('goals', () => {
+      void loadData();
+    });
+  }, [loadData]);
 
   const filteredGoals = goals.filter((goal) => goal.status === activeTab);
   const activeGoalCount = goals.filter((goal) => goal.status === GoalStatus.ACTIVE).length;
@@ -84,6 +96,25 @@ export default function GoalListScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', paddingHorizontal: Spacing.screenH }]}>
+        <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, textAlign: 'center', marginBottom: Spacing.md }}>
+          {loadError}
+        </Text>
+        <Pressable
+          onPress={() => void loadData()}
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading goals"
+        >
+          <Text style={{ ...Typography.Body2, color: Colors.SteelBlue, fontWeight: '600', textAlign: 'center' }}>
+            Try again
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -91,6 +122,7 @@ export default function GoalListScreen() {
           <Text style={styles.title}>Goals</Text>
           <Text style={styles.subtitle}>{getDateString()}</Text>
         </View>
+        <ProfileHeaderButton />
       </View>
 
       <FlatList

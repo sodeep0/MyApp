@@ -5,20 +5,43 @@
 
 export type AuthUpgradeStrategy = 'link' | 'signIn';
 
+const CREDENTIAL_COLLISION_CODES = new Set([
+  'auth/credential-already-in-use',
+  'auth/email-already-in-use',
+  'auth/provider-already-linked',
+]);
+
+/**
+ * Thrown when linking an anonymous session collides with an existing account.
+ * Callers must ask the user to explicitly continue (guest cloud data will not transfer).
+ */
+export class AuthUpgradeRequiresChoiceError extends Error {
+  constructor(
+    message = 'An account already exists for this credential. Continuing signs into that account; guest cloud data will not transfer.',
+  ) {
+    super(message);
+    this.name = 'AuthUpgradeRequiresChoiceError';
+  }
+}
+
+export function isCredentialCollisionError(code: string | undefined): boolean {
+  return typeof code === 'string' && CREDENTIAL_COLLISION_CODES.has(code);
+}
+
 export function shouldAttemptAnonymousLink(isAnonymous: boolean | undefined | null): boolean {
   return isAnonymous === true;
 }
 
 /**
  * After a failed link attempt, decide whether to fall back to normal sign-in.
- * Existing accounts cannot be linked onto the anonymous UID.
+ * Credential collisions require explicit user choice — never silent fallback.
  */
 export function shouldFallbackToSignInAfterLinkFailure(errorCode: string | undefined): boolean {
-  return (
-    errorCode === 'auth/credential-already-in-use'
-    || errorCode === 'auth/email-already-in-use'
-    || errorCode === 'auth/provider-already-linked'
-  );
+  if (isCredentialCollisionError(errorCode)) {
+    return false;
+  }
+  // No other link-failure codes currently allow silent sign-in fallback.
+  return false;
 }
 
 export function resolveAuthUpgradeStrategy(

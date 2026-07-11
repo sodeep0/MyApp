@@ -1,6 +1,7 @@
 // User profile & preferences store
 import type { UserProfile, Intention } from '../types/models';
 import { getUserRepository } from '@/repositories/factory';
+import { invalidate } from '@/stores/invalidate';
 export { DISPLAY_NAME_KEY } from '@/repositories/local/userRepository.local';
 
 function repo() {
@@ -13,10 +14,14 @@ export async function getUserProfile(): Promise<UserProfile | null> {
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
   await repo().saveUserProfile(profile);
+  invalidate('user');
+  invalidate('profile');
 }
 
 export async function updateDisplayName(name: string): Promise<void> {
   await repo().updateDisplayName(name);
+  invalidate('user');
+  invalidate('profile');
 }
 
 export async function getDisplayName(): Promise<string> {
@@ -31,6 +36,8 @@ export async function isOnboardingCompleted(): Promise<boolean> {
 
 export async function setOnboardingCompleted(completed: boolean): Promise<void> {
   await repo().setOnboardingCompleted(completed);
+  invalidate('user');
+  invalidate('profile');
 }
 
 // ─── Intentions ──────────────────────────────────────────────────────────────
@@ -41,6 +48,8 @@ export async function getSelectedIntentions(): Promise<Intention[]> {
 
 export async function saveSelectedIntentions(intentions: Intention[]): Promise<void> {
   await repo().saveSelectedIntentions(intentions);
+  invalidate('user');
+  invalidate('profile');
 }
 
 /**

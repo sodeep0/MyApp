@@ -22,6 +22,10 @@ import {
   Typography,
 } from "../../constants/theme";
 import { LoadingState } from "@/components/LoadingState";
+import { HomeBadHabitCard } from "@/components/home/HomeBadHabitCard";
+import { HomeGoalCard, getGoalProgress } from "@/components/home/HomeGoalCard";
+import { HomeHabitSection } from "@/components/home/HomeHabitSection";
+import { HOME_QUICK_ACTIONS, QuickActions } from "@/components/home/QuickActions";
 import { areNotificationsEnabledAsync } from "@/services/notifications";
 import {
   getNotificationSettings,
@@ -30,7 +34,6 @@ import {
 import { useDisplayName } from "../../hooks/useStore";
 import { navigateWithJournalAccess } from "../../services/journalGate";
 import {
-  daysSinceQuit,
   getAllBadHabits,
   getAllUrgeEvents,
 } from "../../stores/badHabitStore";
@@ -46,11 +49,8 @@ import {
 } from "../../stores/habitStore";
 import {
   type BadHabit,
-  BadHabitCategory,
-  BadHabitSeverity,
   type Goal,
   type Habit,
-  HabitCategory,
 } from "../../types/models";
 
 function getGreeting(name: string) {
@@ -69,227 +69,8 @@ function getDateString() {
   });
 }
 
-function getGoalProgress(goal: Goal) {
-  if (goal.goalType === "QUANTITATIVE" && goal.targetValue && goal.targetValue > 0) {
-    return Math.min(goal.currentValue / goal.targetValue, 1);
-  }
-
-  if (goal.goalType === "MILESTONE" && goal.milestones.length > 0) {
-    const done = goal.milestones.filter((m) => m.isCompleted).length;
-    return Math.min(done / goal.milestones.length, 1);
-  }
-
-  return 0;
-}
-
-function getHabitCategoryLabel(category: HabitCategory) {
-  if (category === HabitCategory.HEALTH) return "Health";
-  if (category === HabitCategory.MIND) return "Mind";
-  if (category === HabitCategory.WORK) return "Work";
-  if (category === HabitCategory.PERSONAL) return "Personal";
-  return "Custom";
-}
-
-function getGoalEmoji(goal: Goal) {
-  if (goal.category === "FITNESS") return "🏃";
-  if (goal.category === "LEARNING") return "📚";
-  if (goal.category === "CAREER") return "💼";
-  if (goal.category === "FINANCE") return "💰";
-  if (goal.category === "RELATIONSHIP") return "❤️";
-  return "🎯";
-}
-
-function getGoalAccent(goal: Goal) {
-  if (goal.category === "FITNESS") return Colors.Success;
-  if (goal.category === "LEARNING") return Colors.SteelBlue;
-  if (goal.category === "CAREER") return Colors.Warning;
-  if (goal.category === "FINANCE") return Colors.TextSecondary;
-  if (goal.category === "RELATIONSHIP") return Colors.Danger;
-  return Colors.SoftSky;
-}
-
-function getBadHabitCategoryLabel(category: BadHabitCategory) {
-  if (category === BadHabitCategory.SUBSTANCE) return "Substance";
-  if (category === BadHabitCategory.DIGITAL) return "Digital";
-  if (category === BadHabitCategory.BEHAVIORAL) return "Behavioral";
-  return "Custom";
-}
-
-function getBadHabitSeverityLabel(severity: BadHabitSeverity) {
-  if (severity === BadHabitSeverity.MILD) return "Mild";
-  if (severity === BadHabitSeverity.MODERATE) return "Moderate";
-  return "Severe";
-}
-
-function getBadHabitAccent(category: BadHabitCategory) {
-  if (category === BadHabitCategory.SUBSTANCE) return Colors.Warning;
-  if (category === BadHabitCategory.DIGITAL) return Colors.SteelBlue;
-  if (category === BadHabitCategory.BEHAVIORAL) return Colors.Success;
-  return Colors.DustyTaupe;
-}
-
-const QUICK_ACTIONS = [
-  {
-    label: "Habit",
-    icon: "add-circle-outline",
-    route: "/(tabs)/habits/add-edit" as const,
-  },
-  {
-    label: "Log",
-    icon: "create-outline",
-    route: "/(tabs)/track/activity" as const,
-  },
-  {
-    label: "Journal",
-    icon: "book-outline",
-    route: "/(tabs)/track/journal" as const,
-  },
-  {
-    label: "Goals",
-    icon: "flag-outline",
-    route: "/(tabs)/goals/add-edit" as const,
-  },
-];
-
 const goalKeyExtractor = (goal: Goal) => goal.id;
 const badHabitKeyExtractor = (habit: BadHabit) => habit.id;
-
-type HomeGoalCardProps = {
-  goal: Goal;
-  onPress: (goalId: string) => void;
-};
-
-const HomeGoalCard = React.memo(function HomeGoalCard({
-  goal,
-  onPress,
-}: HomeGoalCardProps) {
-  const progress = getGoalProgress(goal);
-  const progressPct = Math.round(progress * 100);
-  const accent = getGoalAccent(goal);
-
-  return (
-    <Pressable
-      onPress={() => onPress(goal.id)}
-      style={({ pressed }) => [
-        styles.goalCard,
-        { transform: [{ scale: pressed ? 0.99 : 1 }] },
-      ]}
-    >
-      <View style={styles.goalCardTop}>
-        <Text style={styles.goalEmoji}>{getGoalEmoji(goal)}</Text>
-        <View style={[styles.goalProgressPill, { backgroundColor: accent + "1F" }]}>
-          <Text style={[styles.goalProgressPillText, { color: accent }]}>
-            {progressPct}% complete
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.goalTitle} numberOfLines={2}>
-        {goal.title || "Untitled Goal"}
-      </Text>
-
-      <Text style={styles.goalDate}>
-        {goal.targetDate
-          ? `Deadline: ${new Date(goal.targetDate).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })}`
-          : "Open-ended goal"}
-      </Text>
-
-      <View style={styles.goalBarTrack}>
-        <View
-          style={[
-            styles.goalBarFill,
-            {
-              width: `${Math.max(progressPct, 4)}%`,
-              backgroundColor: accent,
-            },
-          ]}
-        />
-      </View>
-    </Pressable>
-  );
-});
-
-type HomeBadHabitCardProps = {
-  badHabit: BadHabit;
-  relapsed: boolean;
-  onPress: (badHabitId: string) => void;
-};
-
-const HomeBadHabitCard = React.memo(function HomeBadHabitCard({
-  badHabit,
-  relapsed,
-  onPress,
-}: HomeBadHabitCardProps) {
-  const daysClean = daysSinceQuit(badHabit.quitDate);
-  const progressPct = Math.round(Math.max(0, Math.min(daysClean / 7, 1)) * 100);
-  const accent = getBadHabitAccent(badHabit.category);
-
-  return (
-    <Pressable
-      onPress={() => onPress(badHabit.id)}
-      style={({ pressed }) => [
-        styles.badHabitCard,
-        { transform: [{ scale: pressed ? 0.99 : 1 }] },
-      ]}
-    >
-      <View style={styles.badHabitCardTop}>
-        <View style={[styles.badHabitIconBox, { backgroundColor: accent + "14" }]}>
-          <Ionicons name="warning-outline" size={20} color={accent} />
-        </View>
-        <View
-          style={[
-            styles.badHabitMetaPill,
-            {
-              backgroundColor: relapsed
-                ? Colors.Danger + "16"
-                : Colors.Success + "16",
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.badHabitMetaPillText,
-              { color: relapsed ? Colors.Danger : Colors.Success },
-            ]}
-          >
-            {relapsed ? "Relapse logged" : `${daysClean} clean days`}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.badHabitTitle} numberOfLines={2}>
-        {badHabit.name || "Untitled habit"}
-      </Text>
-
-      <Text style={styles.badHabitCaption}>
-        {getBadHabitCategoryLabel(badHabit.category)} · {getBadHabitSeverityLabel(badHabit.severity)}
-      </Text>
-
-      <Text style={styles.badHabitDate}>
-        Since{" "}
-        {new Date(badHabit.quitDate).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        })}
-      </Text>
-
-      <View style={styles.badHabitBarTrack}>
-        <View
-          style={[
-            styles.badHabitBarFill,
-            {
-              width: `${Math.max(progressPct, 4)}%`,
-              backgroundColor: relapsed ? Colors.Danger : accent,
-            },
-          ]}
-        />
-      </View>
-    </Pressable>
-  );
-});
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -634,21 +415,7 @@ export default function HomeScreen() {
           </LinearGradient>
         </View>
 
-        <View style={styles.quickGrid}>
-          {QUICK_ACTIONS.map((action) => (
-            <Pressable
-              key={action.label}
-              onPress={() => handleQuickActionPress(action.route)}
-              style={({ pressed }) => [
-                styles.quickCard,
-                { transform: [{ scale: pressed ? 0.98 : 1 }] },
-              ]}
-            >
-              <Ionicons name={action.icon as any} size={22} color={Colors.SteelBlue} />
-              <Text style={styles.quickLabel}>{action.label}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <QuickActions onActionPress={handleQuickActionPress} />
 
         <Pressable
           onPress={() => router.push("/profile/notifications" as any)}
@@ -680,84 +447,13 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={18} color={Colors.TextSecondary} />
         </Pressable>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today&apos;s Habits</Text>
-            <Pressable onPress={() => router.push("/(tabs)/habits" as any)}>
-              <Text style={styles.sectionAction}>See all</Text>
-            </Pressable>
-          </View>
-
-          {topHabits.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="sparkles-outline" size={24} color={Colors.DustyTaupe} />
-              <Text style={styles.emptyStateTitle}>No habits yet</Text>
-              <Text style={styles.emptyStateCaption}>Create one to start your day with intent.</Text>
-            </View>
-          ) : (
-            <View style={styles.habitList}>
-              {topHabits.map((habit) => {
-                const completed = todayDone.has(habit.id);
-                const category = getHabitCategoryLabel(habit.category);
-                const badgeBg = completed ? Colors.Success + "20" : Colors.SoftSky + "2A";
-                const badgeColor = completed ? Colors.Success : Colors.SteelBlue;
-
-                return (
-                  <Pressable
-                    key={habit.id}
-                    onPress={() => router.push(`/habits/detail?id=${habit.id}` as any)}
-                    style={({ pressed }) => [
-                      styles.habitCard,
-                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
-                    ]}
-                  >
-                    <View style={styles.habitLeft}>
-                      <View
-                        style={[
-                          styles.habitIconCircle,
-                          {
-                            borderColor: completed ? Colors.Success : Colors.SteelBlue,
-                            backgroundColor: completed
-                              ? Colors.Success + "12"
-                              : Colors.SteelBlue + "10",
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={completed ? "checkmark" : "ellipse-outline"}
-                          size={18}
-                          color={completed ? Colors.Success : Colors.SteelBlue}
-                        />
-                      </View>
-
-                      <View style={styles.habitTextBlock}>
-                        <Text
-                          style={[styles.habitName, completed && styles.habitNameDone]}
-                          numberOfLines={1}
-                        >
-                          {habit.name || "Untitled Habit"}
-                        </Text>
-                        <View style={[styles.habitBadge, { backgroundColor: badgeBg }]}> 
-                          <Text style={[styles.habitBadgeText, { color: badgeColor }]}>
-                            {category}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <Pressable onPress={() => toggleComplete(habit.id)} hitSlop={8}>
-                      <Ionicons
-                        name={completed ? "checkmark-circle" : "ellipse-outline"}
-                        size={24}
-                        color={completed ? Colors.Success : Colors.DustyTaupe}
-                      />
-                    </Pressable>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-        </View>
+        <HomeHabitSection
+          habits={topHabits}
+          todayDone={todayDone}
+          onSeeAll={() => router.push("/(tabs)/habits" as any)}
+          onHabitPress={(habitId) => router.push(`/habits/detail?id=${habitId}` as any)}
+          onToggleComplete={toggleComplete}
+        />
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -843,7 +539,7 @@ export default function HomeScreen() {
       >
         <Pressable style={styles.overlay} onPress={() => setShowFAB(false)}>
           <View style={styles.sheet}>
-            {QUICK_ACTIONS.map((action) => (
+            {HOME_QUICK_ACTIONS.map((action) => (
               <Pressable
               key={action.label}
               onPress={() => {

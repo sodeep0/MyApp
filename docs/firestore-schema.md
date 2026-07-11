@@ -2,6 +2,14 @@
 
 This schema supports the hybrid architecture where Profile, Habits, Goals, and Activity sync to Firebase, while Journal and Bad Habits remain local-only.
 
+## Timestamp convention
+
+**Application code uses ISO-8601 strings** for all date/time fields (`createdAt`, `updatedAt`, `loggedAt`, `completedAt`, etc.).
+
+Firestore may store either a native `Timestamp` or a string depending on how a document was written. On read, client repositories normalize values to ISO strings via `toIsoString` before merge/cache.
+
+Conflict handling uses per-entity **`updatedAt` last-write-wins** merge on cloud pull (see `docs/data-policy.md` and `repositories/firebase/mergeByUpdatedAt.ts`).
+
 ## Collections
 
 Top-level user document:
@@ -11,6 +19,7 @@ Top-level user document:
 User subcollections:
 
 - `users/{uid}/habits/{habitId}`
+- `users/{uid}/habits/{habitId}/completions/{completionId}` (Option B — chosen model)
 - `users/{uid}/goals/{goalId}`
 - `users/{uid}/activities/{activityId}`
 
@@ -21,8 +30,8 @@ No journal or bad-habit collections are allowed in Firestore.
 All synced documents should include:
 
 - `userId: string` (must equal `{uid}`)
-- `createdAt: Timestamp`
-- `updatedAt: Timestamp`
+- `createdAt: string` (ISO; may appear as Firestore Timestamp in legacy docs)
+- `updatedAt: string` (ISO; may appear as Firestore Timestamp in legacy docs)
 
 Recommended for soft delete support later:
 
@@ -40,8 +49,8 @@ Recommended for soft delete support later:
   "bio": "",
   "onboardingCompleted": true,
   "selectedIntentions": ["BUILD_HABITS", "GOALS"],
-  "updatedAt": "<timestamp>",
-  "createdAt": "<timestamp>"
+  "updatedAt": "<ISO string>",
+  "createdAt": "<ISO string>"
 }
 ```
 
@@ -62,29 +71,29 @@ Recommended for soft delete support later:
   "reminderTime": "07:00",
   "isArchived": false,
   "streakShieldsRemaining": 0,
-  "createdAt": "<timestamp>",
-  "updatedAt": "<timestamp>"
+  "createdAt": "<ISO string>",
+  "updatedAt": "<ISO string>"
 }
 ```
 
-Optional completion model choices:
+### Completions (Option B — chosen)
 
-- Option A (simple): embed latest completion metadata in habit doc.
-- Option B (recommended): `users/{uid}/habits/{habitId}/completions/{completionId}`.
+Path: `users/{uid}/habits/{habitId}/completions/{completionId}`
 
-If using Option B, completion doc:
+Completions sync with habits on background refresh (batched subcollection reads, then LWW merge into the local completions cache). Writes continue to push via `queueOrPushCompletion` / sync queue.
 
 ```json
 {
   "id": "completionId",
   "habitId": "habitId",
   "completedDate": "YYYY-MM-DD",
-  "completedAt": "<timestamp>",
-  "userId": "uid",
-  "createdAt": "<timestamp>",
-  "updatedAt": "<timestamp>"
+  "completedAt": "<ISO string>",
+  "updatedAt": "<ISO string>",
+  "userId": "uid"
 }
 ```
+
+`updatedAt` is required for LWW. When missing on older docs, clients fall back to `completedAt` for ranking.
 
 ### 3) `users/{uid}/goals/{goalId}`
 
@@ -104,8 +113,8 @@ If using Option B, completion doc:
   "linkedHabitIds": ["habitId"],
   "status": "ACTIVE",
   "completedAt": null,
-  "createdAt": "<timestamp>",
-  "updatedAt": "<timestamp>"
+  "createdAt": "<ISO string>",
+  "updatedAt": "<ISO string>"
 }
 ```
 
@@ -122,15 +131,16 @@ If using Option B, completion doc:
   "time": "09:00",
   "intensity": "HIGH",
   "notes": null,
-  "loggedAt": "<timestamp>",
-  "createdAt": "<timestamp>",
-  "updatedAt": "<timestamp>"
+  "loggedAt": "<ISO string>",
+  "createdAt": "<ISO string>",
+  "updatedAt": "<ISO string>"
 }
 ```
 
 ## Query Patterns (Phase 1)
 
-- List habits: `users/{uid}/habits` ordered by `updatedAt desc`
+- List habits: `users/{uid}/habits` ordered by `createdAt desc` (app may also sort by `updatedAt`)
+- List habit completions: `users/{uid}/habits/{habitId}/completions`
 - List active goals: `users/{uid}/goals` where `status == "ACTIVE"` ordered by `updatedAt desc`
 - List activities: `users/{uid}/activities` ordered by `loggedAt desc`
 - Profile read: `users/{uid}` single doc
@@ -155,4 +165,4 @@ Rules should enforce:
 
 - Existing local data can be backfilled per module on first successful sign-in.
 - Journal and Bad Habits must not be migrated to Firestore.
-- Use `updatedAt` for last-write-wins conflict handling in Phase 1.
+- Use `updatedAt` for last-write-wins conflict handling on cloud pull.

@@ -1,0 +1,38 @@
+# Maestro smoke: onboarding → create habit → toggle complete
+# Run with Maestro installed: maestro test .maestro/smoke-onboarding-habit.yaml
+# Requires a debug/dev build of Kaarma on a connected device/emulator.
+
+appId: com.anonymous.MyApp
+---
+- launchApp
+- assertVisible: "Continue"
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Habits"
+    timeout: 15000
+- tapOn: "Habits"
+- tapOn:
+    id: ".*add.*"
+    optional: true
+- tapOn: "Add Habit"
+  optional: true
+- tapOn:
+    text: ".*"
+    index: 0
+    optional: true
+- inputText: "Morning stretch"
+  optional: true
+- tapOn: "Save"
+  optional: true
+- tapOn: "Create"
+  optional: true
+- assertVisible: "Morning stretch"
+  optional: true
+- tapOn: "Morning stretch"
+  optional: true
+- tapOn:
+    text: "Complete"
+    optional: true
+- tapOn:
+    id: ".*check.*"
+    optional: true

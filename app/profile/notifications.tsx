@@ -282,6 +282,8 @@ export default function NotificationSettingsScreen() {
                   void handleMasterToggle(value);
                 }}
                 disabled={masterBusy || saving}
+                accessibilityLabel="Enable notifications"
+                accessibilityState={{ checked: masterEnabled, disabled: masterBusy || saving }}
                 trackColor={{ false: Colors.BorderSubtle, true: Colors.SteelBlue + '88' }}
                 thumbColor={masterEnabled ? Colors.SteelBlue : Colors.Surface}
               />
@@ -313,6 +315,8 @@ export default function NotificationSettingsScreen() {
                     void handleDetailToggle(item.key, value);
                   }}
                   disabled={controlsDisabled}
+                  accessibilityLabel={item.title}
+                  accessibilityState={{ checked: settings[item.key], disabled: controlsDisabled }}
                   trackColor={{ false: Colors.BorderSubtle, true: Colors.SteelBlue + '88' }}
                   thumbColor={settings[item.key] ? Colors.SteelBlue : Colors.Surface}
                 />

@@ -31,12 +31,51 @@ export const Colors = {
 
   // Status
   Success: '#4CAF82',         // Streaks, completed states
+  SuccessSoft: '#6DD5A0',     // Success gradient companion
   Warning: '#F5A623',          // At-risk, approaching limits
   Danger: '#E05C5C',          // Relapse, blocked, destructive
+
+  // Category accents (goals / taxonomy)
+  Learning: '#7B68EE',
+  Relationship: '#E91E63',
+
+  // Screen-time surfaces
+  PrimaryContainer: '#5D6D99',
 
   // Overlay
   OverlayLight: 'rgba(0,0,0,0.35)',
   OverlayMedium: 'rgba(26,26,46,0.6)',
+} as const;
+
+/** Screen-time usage category chips */
+export const ScreenTimeCategoryColors = {
+  social: '#E1306C',
+  entertainment: '#833AB4',
+  games: '#1DB954',
+} as const;
+
+/** Recognized app brand gradients for screen-time rows (not Kaarma brand). */
+export const AppBrandGradients = {
+  instagram: ['#E1306C', '#C13584', '#833AB4'] as const,
+  youtube: ['#FF0000', '#CC0000'] as const,
+  twitter: ['#1DA1F2', '#0C6DB5'] as const,
+  whatsapp: ['#25D366', '#128C7E'] as const,
+  chrome: ['#4285F4', '#34A853'] as const,
+  facebook: ['#1877F2', '#1565D8'] as const,
+  tiktok: ['#010101', '#69C9D0'] as const,
+  spotify: ['#1DB954', '#159345'] as const,
+  netflix: ['#E50914', '#B20710'] as const,
+  telegram: ['#0088CC', '#006699'] as const,
+} as const;
+
+/** Goal category accent colors */
+export const GoalCategoryColors = {
+  FITNESS: Colors.Success,
+  LEARNING: Colors.Learning,
+  CAREER: Colors.SteelBlue,
+  FINANCE: Colors.Warning,
+  RELATIONSHIP: Colors.Relationship,
+  PERSONAL: Colors.SoftSky,
 } as const;
 
 // ─── Dark Mode Colors (deferred — unused until dark theme ships) ─────────────
@@ -257,6 +296,9 @@ export const theme = {
   Shadows,
   Animation,
   NavBar,
+  ScreenTimeCategoryColors,
+  AppBrandGradients,
+  GoalCategoryColors,
 } as const;
 
 export type ThemeType = typeof theme;

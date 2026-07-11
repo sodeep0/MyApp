@@ -1,7 +1,8 @@
 // Journal entry store (local-only by policy; never sync to Firebase)
 import type { JournalEntry } from '../types/models';
 import { generateUUID } from '@/utils/id';
-import { normalizeJournalEntries } from './journalEntryNormalization';
+import { invalidate } from '@/stores/invalidate';
+import { normalizeJournalEntries, normalizeJournalEntry } from './journalEntryNormalization';
 import { enforceCountLimitedFeatureGate } from '@/services/featureAccess';
 import { getSensitiveItem, setSensitiveItem } from '@/storage/secureDataStorage';
 
@@ -34,6 +35,7 @@ export async function saveJournalEntries(entries: JournalEntry[]): Promise<void>
     legacyKey: JOURNAL_KEY,
     value: normalizeJournalEntries(entries),
   });
+  invalidate('journal');
 }
 
 export async function addJournalEntry(
@@ -43,12 +45,15 @@ export async function addJournalEntry(
 
   const entries = await getAllJournalEntries();
   const now = new Date().toISOString();
-  const entry: JournalEntry = {
+  const entry = normalizeJournalEntry({
     ...data,
     id: generateUUID(),
     createdAt: now,
     updatedAt: now,
-  };
+  });
+  if (!entry) {
+    throw new Error('Invalid journal entry payload.');
+  }
   const updated = [...entries, entry].sort((a, b) => b.date.localeCompare(a.date));
   await saveJournalEntries(updated);
   return entry;
@@ -58,7 +63,15 @@ export async function updateJournalEntry(id: string, updates: Partial<JournalEnt
   const entries = await getAllJournalEntries();
   const idx = entries.findIndex((e) => e.id === id);
   if (idx === -1) return null;
-  entries[idx] = { ...entries[idx], ...updates, updatedAt: new Date().toISOString() };
+  const merged = {
+    ...entries[idx],
+    ...updates,
+    id: entries[idx].id,
+    updatedAt: new Date().toISOString(),
+  };
+  const normalized = normalizeJournalEntry(merged);
+  if (!normalized) return null;
+  entries[idx] = normalized;
   await saveJournalEntries(entries);
   return entries[idx];
 }

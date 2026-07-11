@@ -61,6 +61,8 @@ function GoalCardComponent({ goal, onPress, style }: GoalCardProps) {
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Goal ${goal.title || 'Untitled'}`}
       style={({ pressed }) => [
         { opacity: pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
         styles.container,

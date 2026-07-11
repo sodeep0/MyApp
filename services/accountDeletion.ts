@@ -57,12 +57,22 @@ async function deleteCollectionDocs(db: Firestore, path: string): Promise<void> 
 async function deleteHabitData(db: Firestore, uid: string): Promise<void> {
   const habitsPath = `users/${uid}/habits`;
   const habitsSnap = await getDocs(collection(db, habitsPath));
+  const habitDocs = habitsSnap.docs;
+  const completionRefs: DocumentReference[] = [];
+  const COMPLETION_LIST_CONCURRENCY = 5;
 
-  for (const habitDoc of habitsSnap.docs) {
-    await deleteCollectionDocs(db, `${habitsPath}/${habitDoc.id}/completions`);
+  for (let index = 0; index < habitDocs.length; index += COMPLETION_LIST_CONCURRENCY) {
+    const chunk = habitDocs.slice(index, index + COMPLETION_LIST_CONCURRENCY);
+    const snaps = await Promise.all(
+      chunk.map((habitDoc) => getDocs(collection(db, `${habitsPath}/${habitDoc.id}/completions`))),
+    );
+    for (const snap of snaps) {
+      completionRefs.push(...snap.docs.map((entry) => entry.ref));
+    }
   }
 
-  await commitDeletes(db, habitsSnap.docs.map((entry) => entry.ref));
+  await commitDeletes(db, completionRefs);
+  await commitDeletes(db, habitDocs.map((entry) => entry.ref));
 }
 
 export async function deleteSignedInAccountAndData(): Promise<void> {

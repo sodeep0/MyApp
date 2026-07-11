@@ -203,7 +203,8 @@ export async function setSensitiveItem<T>({
   const key = await getOrCreateEncryptionKey();
   let ivBytes: Uint8Array;
   try {
-    ivBytes = Crypto.getRandomBytes(16) as Uint8Array;
+    // AES-GCM (envelope v3) uses a 12-byte nonce.
+    ivBytes = Crypto.getRandomBytes(12) as Uint8Array;
   } catch (error) {
     throw new Error(
       'Secure IV generation failed. Sensitive local data cannot be encrypted safely.',

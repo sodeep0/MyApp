@@ -2,7 +2,8 @@
 
 > Date: 2026-07-11  
 > Scope: full multi-lens audit (read-only through Phase 3)  
-> Status: **remediation complete for Phases A–E (2026-07-11)**
+> Status: **remediation complete for Phases A–E (2026-07-11)**  
+> **95+ roadmap status (2026-07-11):** Waves 0–5 code-complete. Remaining gap is primarily native/device QA (MVP checklist manual passes), App Check console enforcement, premium billing (out of scope), and screen-time native blocking (out of scope) — see `progress.md` and `docs/mvp-qa-checklist.md`.
 
 ---
 

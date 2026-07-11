@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LoadingState } from '@/components/LoadingState';
+import { ProfileHeaderButton } from '@/components/ProfileHeaderButton';
 import { CommonStyles } from '@/constants/commonStyles';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
 import { navigateWithJournalAccess } from '@/services/journalGate';
@@ -69,6 +70,8 @@ function ModuleCard({ icon, title, description, color, count, onPress }: ModuleC
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
       style={({ pressed }) => [
         styles.moduleCard,
         { opacity: pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
@@ -225,6 +228,7 @@ export default function TrackHubScreen() {
           <Text style={styles.title}>Track</Text>
           <Text style={styles.subtitle}>{getDateString()}</Text>
         </View>
+        <ProfileHeaderButton />
       </View>
 
       <ScrollView

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,19 +12,20 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LoadingState } from '@/components/LoadingState';
+import { ProfileHeaderButton } from '@/components/ProfileHeaderButton';
 import { CommonStyles } from '@/constants/commonStyles';
 import { Colors, Spacing, Typography, Shapes, Shadows } from '@/constants/theme';
 import { Button } from '@/components/Button';
 import { RingProgress } from '@/components/RingProgress';
 import {
   getAllHabits,
-  getTodayCompletionsForHabit,
+  getAllCompletions,
   markHabitComplete,
   unmarkHabitComplete,
   calculateStreak,
   isHabitAtRisk,
-  getCompletionsForHabit,
 } from '@/stores/habitStore';
+import { subscribe } from '@/stores/invalidate';
 import type { Habit, HabitCompletion } from '@/types/models';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -116,12 +117,12 @@ function HabitCard({
     <View style={[styles.habitCard, weekData.atRisk && styles.habitCardAtRisk]}>
       <View style={styles.habitCardTop}>
         <View style={styles.habitCardLeft}>
-          <Pressable onPress={onPress}>
+          <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Open habit ${habit.name}`}>
             <View style={[styles.iconBox, { backgroundColor: iconInfo.bg }]}>
               <Ionicons name={iconInfo.name} size={24} color={iconInfo.color} />
             </View>
           </Pressable>
-          <Pressable onPress={onPress} style={styles.habitInfo}>
+          <Pressable onPress={onPress} style={styles.habitInfo} accessibilityRole="button" accessibilityLabel={`Habit ${habit.name}`}>
             <Text style={styles.habitName}>{habit.name}</Text>
             <View style={styles.habitMeta}>
               <Text style={styles.frequencyText}>
@@ -136,7 +137,14 @@ function HabitCard({
             </View>
           </Pressable>
         </View>
-        <Pressable onPress={onToggle} style={styles.toggleBtn} disabled={disabled}>
+        <Pressable
+          onPress={onToggle}
+          style={styles.toggleBtn}
+          disabled={disabled}
+          accessibilityRole="button"
+          accessibilityLabel={weekData.completedToday ? `Mark ${habit.name} incomplete` : `Complete ${habit.name}`}
+          accessibilityState={{ checked: weekData.completedToday, disabled }}
+        >
           <Ionicons
             name={weekData.completedToday ? 'checkmark-circle' : 'ellipse-outline'}
             size={32}
@@ -203,11 +211,16 @@ export default function HabitListScreen() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [weekDataMap, setWeekDataMap] = useState<Record<string, WeekData>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [pendingToggleIds, setPendingToggleIds] = useState<Record<string, boolean>>({});
 
   const loadData = useCallback(async () => {
+    setLoadError(null);
     try {
-      const habitsData = await getAllHabits();
+      const [habitsData, allCompletions] = await Promise.all([
+        getAllHabits(),
+        getAllCompletions(),
+      ]);
       const sortedHabits = [...habitsData].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setHabits(sortedHabits);
 
@@ -215,38 +228,38 @@ export default function HabitListScreen() {
       const today = formatDateStr(new Date());
       const dataMap: Record<string, WeekData> = {};
 
-      await Promise.all(
-        sortedHabits.map(async (habit) => {
-          const completions = await getCompletionsForHabit(habit.id);
-          const todayComps = await getTodayCompletionsForHabit(habit.id);
-          const completionDates = new Set(completions.map((c) => c.completedDate));
+      for (const habit of sortedHabits) {
+        const completions = allCompletions.filter((c) => c.habitId === habit.id);
+        const completionDates = new Set(completions.map((c) => c.completedDate));
 
-          const dots = weekDates.map((date) => completionDates.has(date));
-          const completedDays = dots.filter((d) => d).length;
-          const daysElapsed = weekDates.filter((d) => d <= today).length;
-          const completionPct = daysElapsed > 0 ? completedDays / daysElapsed : 0;
+        const dots = weekDates.map((date) => completionDates.has(date));
+        const completedDays = dots.filter((d) => d).length;
+        const daysElapsed = weekDates.filter((d) => d <= today).length;
+        const completionPct = daysElapsed > 0 ? completedDays / daysElapsed : 0;
 
-          const streak = calculateStreak(
-            completions,
-            habit.frequency,
-            habit.weekDays,
-            habit.timesPerWeek,
-            habit.everyNDays,
-          );
-          const bestStreak = getBestStreakLocal(completions);
+        const streak = calculateStreak(
+          completions,
+          habit.frequency,
+          habit.weekDays,
+          habit.timesPerWeek,
+          habit.everyNDays,
+        );
+        const bestStreak = getBestStreakLocal(completions);
 
-          dataMap[habit.id] = {
-            dots,
-            completionPct,
-            bestStreak,
-            streak,
-            completedToday: todayComps.length > 0,
-            atRisk: isHabitAtRisk(habit, completions),
-          };
-        }),
-      );
+        dataMap[habit.id] = {
+          dots,
+          completionPct,
+          bestStreak,
+          streak,
+          completedToday: completions.some((c) => c.completedDate === today),
+          atRisk: isHabitAtRisk(habit, completions),
+        };
+      }
 
       setWeekDataMap(dataMap);
+    } catch (error) {
+      console.warn('Habits failed to load.', error);
+      setLoadError('Could not load habits. Try again.');
     } finally {
       setLoading(false);
     }
@@ -263,6 +276,12 @@ export default function HabitListScreen() {
       };
     }, [loadData]),
   );
+
+  useEffect(() => {
+    return subscribe('habits', () => {
+      void loadData();
+    });
+  }, [loadData]);
 
   const handleToggle = async (habitId: string) => {
     if (pendingToggleIds[habitId]) return;
@@ -333,6 +352,28 @@ export default function HabitListScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', paddingHorizontal: Spacing.screenH }]}>
+        <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, textAlign: 'center', marginBottom: Spacing.md }}>
+          {loadError}
+        </Text>
+        <Pressable
+          onPress={() => {
+            setLoading(true);
+            void loadData();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading habits"
+        >
+          <Text style={{ ...Typography.Body2, color: Colors.SteelBlue, fontWeight: '600', textAlign: 'center' }}>
+            Try again
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
@@ -340,6 +381,7 @@ export default function HabitListScreen() {
           <Text style={styles.headerTitle}>My Habits</Text>
           <Text style={styles.headerSubtitle}>{getDateString()}</Text>
         </View>
+        <ProfileHeaderButton />
       </View>
 
       <FlatList

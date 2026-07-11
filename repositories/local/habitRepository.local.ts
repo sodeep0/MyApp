@@ -123,11 +123,13 @@ export const habitLocalRepository: HabitRepository = {
     const exists = all.find((c) => c.habitId === habitId && c.completedDate === today);
     if (exists) return exists;
 
+    const now = new Date().toISOString();
     const completion: HabitCompletion = {
       id: generateUUID(),
       habitId,
       completedDate: today,
-      completedAt: new Date().toISOString(),
+      completedAt: now,
+      updatedAt: now,
     };
     await storage.setItem(COMPLETIONS_KEY, [...all, completion]);
     return completion;

@@ -51,11 +51,18 @@ export default function JournalListScreen() {
   const { isPremium } = useSubscription();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const loadData = useCallback(async () => {
-    const data = await getAllJournalEntries();
-    setEntries(data);
+    setLoadError(null);
+    try {
+      const data = await getAllJournalEntries();
+      setEntries(data);
+    } catch (error) {
+      console.warn('Journal failed to load.', error);
+      setLoadError('Could not load journal entries. Try again.');
+    }
   }, []);
 
   useFocusEffect(
@@ -64,6 +71,7 @@ export default function JournalListScreen() {
 
       const ensureAccessAndLoad = async () => {
         setLoading(true);
+        setLoadError(null);
         const granted = await requestJournalAccess({
           router,
           onCancelled: () => safeBack(router, '/(tabs)/track'),
@@ -161,6 +169,20 @@ export default function JournalListScreen() {
 
         {loading ? (
           <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, textAlign: 'center', paddingVertical: Spacing.xxl }}>Loading entries...</Text>
+        ) : loadError ? (
+          <View style={{ alignItems: 'center', paddingVertical: Spacing.xxl, gap: Spacing.md }}>
+            <Text style={{ ...Typography.Body1, color: Colors.TextSecondary, textAlign: 'center' }}>{loadError}</Text>
+            <Pressable
+              onPress={() => {
+                setLoading(true);
+                void loadData().finally(() => setLoading(false));
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading journal"
+            >
+              <Text style={{ ...Typography.Body2, color: Colors.SteelBlue, fontWeight: '600' }}>Try again</Text>
+            </Pressable>
+          </View>
         ) : filteredEntries.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconWrap}>
